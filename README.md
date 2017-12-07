@@ -1,4 +1,4 @@
-**Not Succeed Yet!**
+**Not Succeed Yet! Bug May Exist in Computing Local Distance!**
 
 This project is in progress. I try to re-produce the impressive results of paper [AlignedReID: Surpassing Human-Level Performance in Person Re-Identification](https://arxiv.org/abs/1711.08184) using [pytorch](https://github.com/pytorch/pytorch).
 
@@ -12,18 +12,27 @@ This project is in progress. I try to re-produce the impressive results of paper
   - [ ] Triplet Local Loss
   - [ ] Identification Loss
   - [ ] Mutual Loss
-- Test Time
+- Testing
   - [ ] Re-Ranking
+- Speed
+  - [ ] Speed up forward & backward
 
-Current results on Market1501
+
+Current results on Market1501:
+
 |   | Rank-1 (%) | mAP (%) |
 | --- | --- | --- |
-| Triplet Global Loss| 82.69 | 65.40 |
+| Triplet Global Loss| 82.72 | 66.85 |
 | Triplet Global + Local Loss| 79.63 | 63.18 |
+
 
 # Installation
 
 It's recommended that you create and enter a python virtual environment before installing our package.
+
+```bash
+git clone https://github.com/huanghoujing/AlignedReID-Re-Production-Pytorch.git
+```
 
 ## Requirements
 
@@ -41,7 +50,7 @@ python setup.py install --record installed_files.txt
 
 # Dataset Preparation
 
-Inspired by Tong Xiao's [open-reid](https://github.com/Cysu/open-reid) project, dataset directories are refactored to support the unified dataset interface.
+Inspired by Tong Xiao's [open-reid](https://github.com/Cysu/open-reid) project, dataset directories are refactored to support a unified dataset interface.
 
 Transformed dataset has following features
 - All used images, including training and testing images, are inside the same folder named `images`
@@ -54,7 +63,7 @@ Transformed dataset has following features
   - `'val_marks'`
   - `'test_im_names'`
   - `'test_marks'`
-- Validation set consists of 100 persons unseen in training set, and validation follows the same ranking protocol of testing.
+- Validation set consists of 100 persons (configurable during transforming dataset) unseen in training set, and validation follows the same ranking protocol of testing.
 - Each val or test image is accompanied by a mark denoting whether it is from
   - query (mark == 0), or
   - gallery (mark == 1), or
@@ -64,7 +73,7 @@ Transformed dataset has following features
 
 You can download what I have transformed for the project from [Google Drive](https://drive.google.com/open?id=1CaWH7_csm9aDyTVgjs7_3dlZIWqoBlv4) or [BaiduYun](https://pan.baidu.com/s/1nvOhpot). Otherwise, you can download the original dataset and transform it using my script, described below.
 
-Download the Market1501 dataset from [here](http://www.liangzheng.org/Project/project_reid.html). Run the following script to transform the dataset, remember to replace the paths with yours.
+Download the Market1501 dataset from [here](http://www.liangzheng.org/Project/project_reid.html). Run the following script to transform the dataset, replacing the paths with yours.
 
 ```bash
 python script/dataset/transform_market1501.py \
@@ -87,7 +96,7 @@ Details of the new protocol can be found [here](https://github.com/zhunzhong07/p
 
 You can download what I have transformed for the project from [Google Drive](https://drive.google.com/open?id=1Ssp9r4g8UbGveX-9JvHmjpcesvw90xIF) or [BaiduYun](https://pan.baidu.com/s/1hsB0pIc). Otherwise, you can download the original dataset and transform it using my script, described below.
 
-Download the CUHK03 dataset from [here](http://www.ee.cuhk.edu.hk/~xgwang/CUHK_identification.html). Then download the training/testing partition file from [Google Drive](https://drive.google.com/open?id=14lEiUlQDdsoroo8XJvQ3nLZDIDeEizlP) or [BaiduYun](https://pan.baidu.com/s/1miuxl3q). This partition file specifies which images are in training, query or gallery set. Finally run the following script to transform the dataset, remember to replace the paths with yours.
+Download the CUHK03 dataset from [here](http://www.ee.cuhk.edu.hk/~xgwang/CUHK_identification.html). Then download the training/testing partition file from [Google Drive](https://drive.google.com/open?id=14lEiUlQDdsoroo8XJvQ3nLZDIDeEizlP) or [BaiduYun](https://pan.baidu.com/s/1miuxl3q). This partition file specifies which images are in training, query or gallery set. Finally run the following script to transform the dataset, replacing the paths with yours.
 
 ```bash
 python script/dataset/transform_cuhk03.py \
@@ -101,7 +110,7 @@ python script/dataset/transform_cuhk03.py \
 
 You can download what I have transformed for the project from [Google Drive](https://drive.google.com/open?id=1P9Jr0en0HBu_cZ7txrb2ZA_dI36wzXbS) or [BaiduYun](https://pan.baidu.com/s/1miIdEek). Otherwise, you can download the original dataset and transform it using my script, described below.
 
-Download the DukeMTMC-reID dataset from [here](https://github.com/layumi/DukeMTMC-reID_evaluation). Run the following script to transform the dataset, remember to replace the paths with yours.
+Download the DukeMTMC-reID dataset from [here](https://github.com/layumi/DukeMTMC-reID_evaluation). Run the following script to transform the dataset, replacing the paths with yours.
 
 ```bash
 python script/dataset/transform_duke.py \
@@ -111,10 +120,10 @@ python script/dataset/transform_duke.py \
 
 ## Configure Dataset Path in Training Script
 
-The training code requires you to configure the dataset paths. Modify the following snippet according to your saving paths used in transforming datasets.
+The training code requires you to configure the dataset paths. In `script/tri_loss/train_cfg.py`, modify the following snippet according to your saving paths used in preparing datasets.
 
 ```python
-# File script/tri_loss/train_cfg.py
+# In file script/tri_loss/train_cfg.py
 
 if self.dataset == 'market1501':
   self.im_dir = osp.expanduser('~/Dataset/market1501/images')
@@ -130,11 +139,9 @@ elif self.dataset == 'duke':
 
 # Training Examples
 
-**NOTE:** These scripts and options should change as the project makes progress.
-
 **NOTE:** After changing files in directory `aligned_reid`, you have to install the package again by `python setup.py install --record installed_files.txt`. Because scripts that import from this `aligned_reid` package in fact import from site-package, you have to install to update the site-package.
 
-To train and test ResNet-50 + Triplet Global Loss on Market1501
+To train and test ResNet-50 + Triplet Global Loss on Market1501:
 
 ```bash
 python script/tri_loss/train.py \
@@ -146,7 +153,7 @@ python script/tri_loss/train.py \
 --log_to_file
 ```
 
-To train and test ResNet-50 + Triplet Global Loss + Triplet Local Loss on Market1501
+To train and test ResNet-50 + Triplet Global Loss + Triplet Local Loss on Market1501:
 
 ```bash
 python script/tri_loss/train.py \
@@ -161,13 +168,12 @@ python script/tri_loss/train.py \
 You can run the [TensorBoard](https://github.com/lanpa/tensorboard-pytorch) to watch the loss curves etc during training. E.g.
 
 ```bash
+# Modify the path for `--logdir` accordingly.
 tensorboard --logdir exp/tri_loss/market1501/train/g1.0000_l1.0000/run1/tensorboard
 ```
 
-Modify the `--logdir` path accordingly. For more usage of TensorBoard, see the help
+For more usage of TensorBoard, see the help:
 
 ```bash
 tensorboard --help
 ```
-
-tensorboard --logdir unnorm_g_l_loss:exp/tri_loss/market1501/train/g1.0_l1.0_l_loss_div_by_m+n/run1/tensorboard,norm_g_l_loss:exp/tri_loss/market1501/train/g1.0_l1.0_l_loss_dtw_div_by_m+n/run1/tensorboard,norm_g_l_loss_dtw:exp/tri_loss/market1501/train/g1.0_l1.0_l_loss_not_div_by_m+n/run1/tensorboard
