@@ -1,0 +1,10 @@
+# torch==0.1.12.post2
+opencv_python==3.2.0.7
+numpy==1.11.3
+hickle==2.1.0
+matplotlib==2.0.0
+scipy==0.18.1
+h5py==2.6.0
+tensorboardX==0.8
+# for tensorboard web server
+tensorflow==1.2.0
