@@ -55,34 +55,7 @@ def shortest_dist(dist_mat):
         dist[i][j] = dist[i - 1][j] + dist_mat[i, j]
       else:
         dist[i][j] = torch.min(dist[i - 1][j], dist[i][j - 1]) + dist_mat[i, j]
-  dist = dist[-1][-1] / (m + n)
-  return dist
-
-
-def shortest_dist_dtw(dist_mat):
-  """
-  Compute shortest path, this version is Dynamic Time Warping (DTW).
-  Args:
-    dist_mat: pytorch Variable, with shape [m, n]
-  Returns:
-    dist: pytorch Variable, with shape [1]. NOTE: it's normalized by (m + n).
-  """
-  m, n = dist_mat.size()
-  dist = [[0 for _ in range(n)] for _ in range(m)]
-  for i in range(m):
-    for j in range(n):
-      if (i == 0) and (j == 0):
-        dist[i][j] = dist_mat[i, j]
-      elif (i == 0) and (j > 0):
-        dist[i][j] = dist[i][j - 1] + dist_mat[i, j]
-      elif (i > 0) and (j == 0):
-        dist[i][j] = dist[i - 1][j] + dist_mat[i, j]
-      else:
-        dist[i][j] = torch.min(torch.cat([dist[i - 1][j],
-                                          dist[i][j - 1],
-                                          dist[i - 1][j - 1]])) \
-                     + dist_mat[i, j]
-  dist = dist[-1][-1] / (m + n)
+  dist = dist[-1][-1]
   return dist
 
 
@@ -103,7 +76,6 @@ def local_dist(x, y):
   # print('dist_mat:\n')
   # print_array(dist_mat.data.cpu().numpy().flatten())
   dist = shortest_dist(dist_mat)
-  # dist = shortest_dist_dtw(dist_mat)
   return dist
 
 

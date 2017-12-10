@@ -1,13 +1,3 @@
-"""
-python script/tri_loss/train.py \
--d '(0,)' \
--r 1 \
---dataset market1501 \
--glw 1.0 \
--llw 0 \
---log_to_file \
---exp_dir exp/tri_loss/market1501/train/g1.0_l0/run1
-"""
 from __future__ import print_function
 
 import torch
@@ -202,7 +192,7 @@ def main():
           loss_meter.val))
 
     # Epoch logs
-    print('\tStep {}/Ep {}, {:.2f}s, '
+    print('Ep {}, {:.2f}s, '
           'gp {:.4f}, gr {:.4f}, g_loss {:.4f}, '
           'lp {:.4f}, lr {:.4f}, l_loss: {:.4f}, '
           'loss: {:.4f}'.format(

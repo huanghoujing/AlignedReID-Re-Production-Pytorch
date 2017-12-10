@@ -174,7 +174,7 @@ class Config(object):
     self.weight_decay = 0.0005
     # Initial learning rate
     self.lr = 2e-4
-    self.start_decay_epoch = 100
+    self.start_decay_epoch = 75
     # Number of epochs to train
     self.num_epochs = 150
     # How often (in batches) to log. If only need to log the average

@@ -1,5 +1,3 @@
-**Not Succeed Yet! Bug May Exist in Computing Local Distance!**
-
 This project is in progress. I try to re-produce the impressive results of paper [AlignedReID: Surpassing Human-Level Performance in Person Re-Identification](https://arxiv.org/abs/1711.08184) using [pytorch](https://github.com/pytorch/pytorch).
 
 
@@ -22,8 +20,8 @@ Current results on Market1501:
 
 |   | Rank-1 (%) | mAP (%) |
 | --- | --- | --- |
-| Triplet Global Loss| 82.72 | 66.85 |
-| Triplet Global + Local Loss| 79.63 | 63.18 |
+| Triplet Global Loss| 81.53 | 64.87 |
+| Triplet Global + Local Loss| 84.29 | 67.94 |
 
 
 # Installation
