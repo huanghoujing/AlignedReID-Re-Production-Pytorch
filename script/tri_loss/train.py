@@ -196,7 +196,7 @@ def main():
           'gp {:.4f}, gr {:.4f}, g_loss {:.4f}, '
           'lp {:.4f}, lr {:.4f}, l_loss: {:.4f}, '
           'loss: {:.4f}'.format(
-      step, ep + 1, time.time() - ep_st,
+      ep + 1, time.time() - ep_st,
       g_prec_meter.avg, g_ret_meter.avg, g_loss_meter.avg,
       l_prec_meter.avg, l_ret_meter.avg, l_loss_meter.avg,
       loss_meter.avg))
