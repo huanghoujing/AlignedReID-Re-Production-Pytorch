@@ -15,8 +15,8 @@ from train_cfg import Config
 from aligned_reid.tri_loss.dataset import create_dataset
 from aligned_reid.tri_loss.model.Model import Model
 from aligned_reid.tri_loss.model.TripletLoss import TripletLoss
-from aligned_reid.tri_loss.model.Loss import global_loss
-from aligned_reid.tri_loss.model.Loss import local_loss
+from aligned_reid.tri_loss.model.loss import global_loss
+from aligned_reid.tri_loss.model.loss import local_loss
 
 from aligned_reid.utils.utils import may_set_mode
 from aligned_reid.utils.utils import load_ckpt
@@ -103,7 +103,8 @@ def main():
     ims = Variable(TVT(torch.from_numpy(ims).float()))
     global_feat, local_feat = model_w(ims)
     global_feat = global_feat.data.cpu().numpy()
-    return global_feat
+    local_feat = local_feat.data.cpu().numpy()
+    return global_feat, local_feat
 
   train_set, val_set, test_set = None, None, None
   if not cfg.only_test:
@@ -121,7 +122,10 @@ def main():
   if cfg.only_test:
     print('=====> Test')
     load_ckpt(modules_optims, cfg.ckpt_file)
-    mAP, cmc_scores, mq_mAP, mq_cmc_scores = test_set.eval(normalize_feat=True)
+    mAP, cmc_scores, mq_mAP, mq_cmc_scores = test_set.eval(
+      normalize_feat=True,
+      global_weight=cfg.g_test_weight,
+      local_weight=cfg.l_test_weight)
     return
 
   ############
@@ -135,13 +139,21 @@ def main():
     may_set_mode(modules_optims, 'train')
 
     epoch_done = False
+
     g_prec_meter = AverageMeter()
-    l_prec_meter = AverageMeter()
-    g_ret_meter = AverageMeter()
-    l_ret_meter = AverageMeter()
+    g_m_meter = AverageMeter()
+    g_dist_ap_meter = AverageMeter()
+    g_dist_an_meter = AverageMeter()
     g_loss_meter = AverageMeter()
+
+    l_prec_meter = AverageMeter()
+    l_m_meter = AverageMeter()
+    l_dist_ap_meter = AverageMeter()
+    l_dist_an_meter = AverageMeter()
     l_loss_meter = AverageMeter()
+
     loss_meter = AverageMeter()
+
     ep_st = time.time()
     step = 0
     while not epoch_done:
@@ -152,16 +164,22 @@ def main():
       ims, im_names, labels, mirrored, epoch_done = train_set.next_batch()
 
       ims_var = Variable(TVT(torch.from_numpy(ims).float()))
-      # labels_var = Variable(TVT(torch.from_numpy(labels).long()))
+      labels_t = TVT(torch.from_numpy(labels).long())
       global_feat, local_feat = model_w(ims_var)
 
-      g_loss, g_prec, g_ret, p_inds, n_inds = global_loss(
-        g_tri_loss, global_feat, labels)
+      g_loss, p_inds, n_inds, g_dist_ap, g_dist_an = global_loss(
+        g_tri_loss, global_feat, labels_t)
+
       if cfg.l_loss_weight == 0:
-        l_loss, l_prec, l_ret = 0, 0, 0
+        l_loss, l_prec, l_m = 0, 0, 0
       else:
-        l_loss, l_prec, l_ret = local_loss(
-          l_tri_loss, local_feat, p_inds, n_inds, labels)
+        l_loss, l_dist_ap, l_dist_an = local_loss(
+          l_tri_loss, local_feat, p_inds, n_inds, labels_t)
+
+        # Let local distance find its own hard samples.
+        # l_loss, l_dist_ap, l_dist_an = local_loss(
+        #   l_tri_loss, local_feat, None, None, labels_t)
+
       loss = g_loss * cfg.g_loss_weight + l_loss * cfg.l_loss_weight
 
       optimizer.zero_grad()
@@ -169,37 +187,66 @@ def main():
 
       optimizer.step()
 
+      # Step logs
+
+      # precision
+      g_prec = (g_dist_an > g_dist_ap).data.float().mean()
+      # the proportion of triplets that satisfy margin
+      g_m = (g_dist_an > g_dist_ap + cfg.global_margin).data.float().mean()
+      g_d_ap = g_dist_ap.data.mean()
+      g_d_an = g_dist_an.data.mean()
+
       g_prec_meter.update(g_prec)
-      g_ret_meter.update(g_ret)
+      g_m_meter.update(g_m)
+      g_dist_ap_meter.update(g_d_ap)
+      g_dist_an_meter.update(g_d_an)
       g_loss_meter.update(to_scalar(g_loss))
 
       if cfg.l_loss_weight > 0:
+        # precision
+        l_prec = (l_dist_an > l_dist_ap).data.float().mean()
+        # the proportion of triplets that satisfy margin
+        l_m = (l_dist_an > l_dist_ap + cfg.local_margin).data.float().mean()
+        l_d_ap = l_dist_ap.data.mean()
+        l_d_an = l_dist_an.data.mean()
+
         l_prec_meter.update(l_prec)
-        l_ret_meter.update(l_ret)
+        l_m_meter.update(l_m)
+        l_dist_ap_meter.update(l_d_ap)
+        l_dist_an_meter.update(l_d_an)
         l_loss_meter.update(to_scalar(l_loss))
 
       loss_meter.update(to_scalar(loss))
 
-      # Step logs
       if step % cfg.log_steps == 0:
-        print('\tStep {}/Ep {}, {:.2f}s, '
-              'gp {:.4f}, gr {:.4f}, g_loss {:.4f}, '
-              'lp {:.4f}, lr {:.4f}, l_loss: {:.4f}, '
-              'loss: {:.4f}'.format(
-          step, ep + 1, time.time() - step_st,
-          g_prec_meter.val, g_ret_meter.val, g_loss_meter.val,
-          l_prec_meter.val, l_ret_meter.val, l_loss_meter.val,
-          loss_meter.val))
+        print(
+          '\tStep {}/Ep {}, {:.2f}s, '
+          'gp {:.4f}, gm {:.4f}, gd_ap {:.4f}, gd_an {:.4f}, g_loss {:.4f}, '
+          'lp {:.4f}, lm {:.4f}, ld_ap {:.4f}, ld_an {:.4f}, l_loss {:.4f}, '
+          'loss: {:.4f}'.format(
+            step, ep + 1, time.time() - step_st,
+            g_prec_meter.val, g_m_meter.val,
+            g_dist_ap_meter.val, g_dist_an_meter.val,
+            g_loss_meter.val,
+            l_prec_meter.val, l_m_meter.val,
+            l_dist_ap_meter.val, l_dist_an_meter.val,
+            l_loss_meter.val,
+            loss_meter.val))
 
     # Epoch logs
-    print('Ep {}, {:.2f}s, '
-          'gp {:.4f}, gr {:.4f}, g_loss {:.4f}, '
-          'lp {:.4f}, lr {:.4f}, l_loss: {:.4f}, '
-          'loss: {:.4f}'.format(
-      ep + 1, time.time() - ep_st,
-      g_prec_meter.avg, g_ret_meter.avg, g_loss_meter.avg,
-      l_prec_meter.avg, l_ret_meter.avg, l_loss_meter.avg,
-      loss_meter.avg))
+    print(
+      'Ep {}, {:.2f}s, '
+      'gp {:.4f}, gm {:.4f}, gd_ap {:.4f}, gd_an {:.4f}, g_loss {:.4f}, '
+      'lp {:.4f}, lm {:.4f}, ld_ap {:.4f}, ld_an {:.4f}, l_loss {:.4f}, '
+      'loss: {:.4f}'.format(
+        ep + 1, time.time() - ep_st,
+        g_prec_meter.avg, g_m_meter.avg,
+        g_dist_ap_meter.avg, g_dist_an_meter.avg,
+        g_loss_meter.avg,
+        l_prec_meter.avg, l_m_meter.avg,
+        l_dist_ap_meter.avg, l_dist_an_meter.avg,
+        l_loss_meter.avg,
+        loss_meter.avg))
 
     if cfg.log_to_file:
       writer.add_scalars(
@@ -211,17 +258,30 @@ def main():
       writer.add_scalars(
         'tri_precision',
         dict(global_precision=g_prec_meter.avg,
-             local_precision=l_prec_meter.avg,),
+             local_precision=l_prec_meter.avg, ),
         ep)
       writer.add_scalars(
         'satisfy_margin',
-        dict(global_proportion=g_ret_meter.avg,
-             local_proportion=l_ret_meter.avg,),
+        dict(global_proportion=g_m_meter.avg,
+             local_proportion=l_m_meter.avg, ),
+        ep)
+      writer.add_scalars(
+        'global_dist',
+        dict(global_dist_ap=g_dist_ap_meter.avg,
+             global_dist_an=g_dist_an_meter.avg, ),
+        ep)
+      writer.add_scalars(
+        'local_dist',
+        dict(local_dist_ap=l_dist_ap_meter.avg,
+             local_dist_an=l_dist_an_meter.avg, ),
         ep)
 
     mAP = 0
     # print('=====> Validation')
-    # mAP = val_set.eval(normalize_feat=True)
+    # mAP, cmc_scores, mq_mAP, mq_cmc_scores = val_set.eval(
+    #   normalize_feat=True,
+    #   global_weight=cfg.g_test_weight,
+    #   local_weight=cfg.l_test_weight)
 
     # save ckpt
     if cfg.save_ckpt:
@@ -236,7 +296,10 @@ def main():
 
   if cfg.test:
     print('=====> Test')
-    mAP, cmc_scores, mq_mAP, mq_cmc_scores = test_set.eval(normalize_feat=True)
+    mAP, cmc_scores, mq_mAP, mq_cmc_scores = test_set.eval(
+      normalize_feat=True,
+      global_weight=cfg.g_test_weight,
+      local_weight=cfg.l_test_weight)
 
 
 if __name__ == '__main__':

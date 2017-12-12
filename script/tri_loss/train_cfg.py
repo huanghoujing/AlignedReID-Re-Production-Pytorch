@@ -20,6 +20,8 @@ class Config(object):
     parser.add_argument('--log_to_file', action='store_true')
     parser.add_argument('-glw', '--g_loss_weight', type=float, default=1.)
     parser.add_argument('-llw', '--l_loss_weight', type=float, default=0.)
+    parser.add_argument('-gtw', '--g_test_weight', type=float, default=1.)
+    parser.add_argument('-ltw', '--l_test_weight', type=float, default=0.)
     parser.add_argument('--only_test', action='store_true')
     parser.add_argument('--exp_dir', type=str, default='')
 
@@ -153,6 +155,11 @@ class Config(object):
     self.g_loss_weight = args.g_loss_weight
     # local loss weight
     self.l_loss_weight = args.l_loss_weight
+
+    # global distance weight in testing
+    self.g_test_weight = args.g_test_weight
+    # local distance weight in testing
+    self.l_test_weight = args.l_test_weight
 
     #######
     # Log #

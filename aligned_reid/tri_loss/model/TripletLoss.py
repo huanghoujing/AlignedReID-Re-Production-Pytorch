@@ -22,22 +22,10 @@ class TripletLoss(object):
         shape [N]
     Returns:
       loss: pytorch Variable, with shape [1]
-      prec: a scalar. precision, the percentage of 
-        `dist(anchor, neg) > dist(anchor, pos)`
-      ret: a scalar. If `self.margin is None`, average of 
-        `dist(anchor, neg) - dist(anchor, pos)`; Otherwise, percentage of 
-        `dist(anchor, neg) > dist(anchor, pos) + margin`.
     """
     y = Variable(dist_an.data.new().resize_as_(dist_an.data).fill_(1))
     if self.margin is not None:
       loss = self.ranking_loss(dist_an, dist_ap, y)
     else:
       loss = self.ranking_loss(dist_an - dist_ap, y)
-    prec = (dist_an.data > dist_ap.data).sum() * 1. / y.size(0)
-    if self.margin is not None:
-      # Percentage of satisfying the margin
-      ret = (dist_an.data > dist_ap.data + self.margin).sum() * 1. / y.size(0)
-    else:
-      # Average distance difference
-      ret = float((dist_an.data - dist_ap.data).sum()) / y.size(0)
-    return loss, prec, ret
+    return loss
