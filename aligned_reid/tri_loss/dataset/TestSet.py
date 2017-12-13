@@ -198,7 +198,8 @@ class TestSet(Dataset):
       # Even if memory may be enough to store the large matrix, frequently
       # allocating and freeing large memory (e.g. dozens of GB) alone takes
       # MUCH time.
-      num_splits = int(len(g_local_feats) / 100) + 1
+      # If out of memory, increase `num_splits`.
+      num_splits = int(len(g_local_feats) / 50) + 1
       local_q_g_dist = []
       for i, glf in enumerate(np.array_split(g_local_feats, num_splits)):
         local_q_g_dist.append(local_dist(q_local_feats, glf))

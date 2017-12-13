@@ -1,27 +1,67 @@
 This project is in progress. I try to re-produce the impressive results of paper [AlignedReID: Surpassing Human-Level Performance in Person Re-Identification](https://arxiv.org/abs/1711.08184) using [pytorch](https://github.com/pytorch/pytorch).
 
+If you adopt AlignedReID in your research, please cite the paper
+```
+@article{zhang2017alignedreid,
+  title={AlignedReID: Surpassing Human-Level Performance in Person Re-Identification},
+  author={Zhang, Xuan and Luo, Hao and Fan, Xing and Xiang, Weilai and Sun, Yixiao and Xiao, Qiqi and Jiang, Wei and Zhang, Chi and Sun, Jian},
+  journal={arXiv preprint arXiv:1711.08184},
+  year={2017}
+}
+```
 
 # TODO List
 
-- Models
+- Model
   - [x] ResNet-50
 - Loss
   - [x] Triplet Global Loss
-  - [ ] Triplet Local Loss
-  - [ ] Identification Loss
+  - [x] Triplet Local Loss
+  - [x] Identification Loss
   - [ ] Mutual Loss
 - Testing
   - [ ] Re-Ranking
 - Speed
-  - [ ] Speed up forward & backward
+  - [x] Speed up forward & backward
+  - [ ] Speed up local distance at test time. (Replace numpy by pytorch cuda operation.)
 
 
-Current results on Market1501:
+Current results on Market1501 with setting
+- global margin 0.3
+- local margin 0.3
+- Adam optimizer
+- Base learning rate 2e-4, decaying exponentially after 75 epochs, 150 epochs in total. Refer to paper (In Defense of the Triplet Loss for Person Re-Identification)[https://arxiv.org/abs/1703.07737].
+
 
 |   | Rank-1 (%) | mAP (%) |
 | --- | --- | --- |
-| Triplet Global Loss| 81.53 | 64.87 |
-| Triplet Global + Local Loss| 84.29 | 67.94 |
+| GL-NF | 81.53 | 64.87 |
+| --- | --- | --- |
+| GL-LL-NF-LHSFGD-TWGD | 84.29 | 67.94 |
+| GL-LL-NNF-LHSFGD-TWGD | 84.74 | 68.11 |
+| --- | --- | --- |
+| GL-LL-NNF-LHSFLD-TWGD | 85.18 | 68.31 |
+| GL-LL-NNF-LHSFLD-TWLD | 85.60 | 68.72 |
+| GL-LL-NNF-LHSFLD-TWGALD | 86.46 | 70.13 |
+| --- | --- | --- |
+| GL-IDL-NNF | 85.10 | 68.26 |
+| GL-LL-IDL-NNF-LHSFLD-TWGD | 84.74 | 68.34 |
+| GL-LL-IDL-NNF-LHSFLD-TWLD | 85.51 | 67.77 |
+| GL-LL-IDL-NNF-LHSFLD-TWGALD | 85.45 | 69.47 |
+
+**Notation**
+- GL: Global Loss
+- LL: Local Loss
+- IDL: IDentification Loss
+- NF: Normalize Feature (both before Equation (1) of the paper and at test time)
+- NNF: Not Normalize Feature (both before Equation (1) of the paper and at test time)
+- LHSFGD: Local Hard Sample From Global Distance
+- LHSFLD: Local Hard Sample From Local Distance
+- TWGD: Test With Global Distance
+- TWLD: Test With Local Distance
+- TWGALD: Test With Global And Local Distance
+
+The current number of iterations may be insufficient for training ID Loss. The learning rate decaying function should be adjusted as well.
 
 
 # Installation
@@ -30,6 +70,7 @@ It's recommended that you create and enter a python virtual environment before i
 
 ```bash
 git clone https://github.com/huanghoujing/AlignedReID-Re-Production-Pytorch.git
+cd AlignedReID-Re-Production-Pytorch
 ```
 
 ## Requirements
@@ -137,37 +178,47 @@ elif self.dataset == 'duke':
 
 # Training Examples
 
-**NOTE:** After changing files in directory `aligned_reid`, you have to install the package again by `python setup.py install --record installed_files.txt`. Because scripts that import from this `aligned_reid` package in fact import from site-package, you have to install to update the site-package.
+**NOTE:** After changing files in directory `aligned_reid`, you have to install the package again by `python setup.py install --record installed_files.txt`. Because scripts that import from this `aligned_reid` package in fact import from site-packages (Decided by where you run the script? Not sure.), you have to install to update it.
 
-To train and test ResNet-50 + Triplet Global Loss on Market1501:
+To train and test `ResNet-50 + Global Loss` on Market1501:
 
 ```bash
 python script/tri_loss/train.py \
 -d '(0,)' \
--r 1 \
 --dataset market1501 \
--glw 1.0 \
+--normalize_feature false \
+--local_dist_own_hard_sample true \
+-gm 0.3 \
+-lm 0.3 \
+-glw 1 \
 -llw 0 \
---log_to_file
+-idlw 0 \
+-gtw 1 \
+-ltw 0
 ```
 
-To train and test ResNet-50 + Triplet Global Loss + Triplet Local Loss on Market1501:
+To train `ResNet-50 + Global Loss + Local Loss` on Market1501, and test with `Global + Local Distance`:
 
 ```bash
 python script/tri_loss/train.py \
 -d '(0,)' \
--r 1 \
 --dataset market1501 \
--glw 1.0 \
--llw 1.0 \
---log_to_file
+--normalize_feature false \
+--local_dist_own_hard_sample true \
+-gm 0.3 \
+-lm 0.3 \
+-glw 1 \
+-llw 1 \
+-idlw 0 \
+-gtw 1 \
+-ltw 1
 ```
 
 You can run the [TensorBoard](https://github.com/lanpa/tensorboard-pytorch) to watch the loss curves etc during training. E.g.
 
 ```bash
 # Modify the path for `--logdir` accordingly.
-tensorboard --logdir exp/tri_loss/market1501/train/g1.0000_l1.0000/run1/tensorboard
+tensorboard --logdir exp/tri_loss/market1501/train/not_nf_ohs_gm_0.3_lm_0.3_glw_1_llw_1_idlw_0_gtw_1_ltw_1/run1/tensorboard
 ```
 
 For more usage of TensorBoard, see the help:

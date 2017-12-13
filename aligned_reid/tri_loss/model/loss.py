@@ -95,13 +95,13 @@ def local_dist(x, y):
   """
   M, m, d = x.size()
   N, n, d = y.size()
-  x = x.view(M * m, d)
-  y = y.view(N * n, d)
+  x = x.contiguous().view(M * m, d)
+  y = y.contiguous().view(N * n, d)
   # shape [M * m, N * n]
   dist_mat = euclidean_dist(x, y)
   dist_mat = (torch.exp(dist_mat) - 1.) / (torch.exp(dist_mat) + 1.)
   # shape [M * m, N * n] -> [M, m, N, n] -> [m, n, M, N]
-  dist_mat = dist_mat.view(M, m, N, n).permute(1, 3, 0, 2)
+  dist_mat = dist_mat.contiguous().view(M, m, N, n).permute(1, 3, 0, 2)
   # shape [M, N]
   dist_mat = shortest_dist(dist_mat)
   return dist_mat
@@ -155,10 +155,12 @@ def hard_example_mining(dist_mat, labels, return_inds=False):
 
   # `dist_ap` means distance(anchor, positive)
   # both `dist_ap` and `relative_p_inds` with shape [N, 1]
-  dist_ap, relative_p_inds = torch.max(dist_mat[is_pos].view(N, -1), 1)
+  dist_ap, relative_p_inds = torch.max(
+    dist_mat[is_pos].contiguous().view(N, -1), 1)
   # `dist_an` means distance(anchor, negative)
   # both `dist_an` and `relative_n_inds` with shape [N, 1]
-  dist_an, relative_n_inds = torch.min(dist_mat[is_neg].view(N, -1), 1)
+  dist_an, relative_n_inds = torch.min(
+    dist_mat[is_neg].contiguous().view(N, -1), 1)
   # shape [N]
   dist_ap = dist_ap.squeeze(1)
   dist_an = dist_an.squeeze(1)
@@ -169,8 +171,10 @@ def hard_example_mining(dist_mat, labels, return_inds=False):
            .copy_(torch.arange(0, N).long())
            .unsqueeze( 0).expand(N, N))
     # shape [N, 1]
-    p_inds = torch.gather(ind[is_pos].view(N, -1), 1, relative_p_inds.data)
-    n_inds = torch.gather(ind[is_neg].view(N, -1), 1, relative_n_inds.data)
+    p_inds = torch.gather(
+      ind[is_pos].contiguous().view(N, -1), 1, relative_p_inds.data)
+    n_inds = torch.gather(
+      ind[is_neg].contiguous().view(N, -1), 1, relative_n_inds.data)
     # shape [N]
     p_inds = p_inds.squeeze(1)
     n_inds = n_inds.squeeze(1)
@@ -179,7 +183,7 @@ def hard_example_mining(dist_mat, labels, return_inds=False):
   return dist_ap, dist_an
 
 
-def global_loss(tri_loss, global_feat, labels):
+def global_loss(tri_loss, global_feat, labels, normalize_feature=True):
   """
   Args:
     tri_loss: a `TripletLoss` object
@@ -197,7 +201,8 @@ def global_loss(tri_loss, global_feat, labels):
     dist_ap: pytorch Variable, distance(anchor, positive); shape [N]
     dist_an: pytorch Variable, distance(anchor, negative); shape [N]
   """
-  global_feat = normalize(global_feat, axis=-1)
+  if normalize_feature:
+    global_feat = normalize(global_feat, axis=-1)
   # shape [N, N]
   dist_mat = euclidean_dist(global_feat, global_feat)
   dist_ap, dist_an, p_inds, n_inds = hard_example_mining(
@@ -206,7 +211,13 @@ def global_loss(tri_loss, global_feat, labels):
   return loss, p_inds, n_inds, dist_ap, dist_an
 
 
-def local_loss(tri_loss, local_feat, p_inds=None, n_inds=None, labels=None):
+def local_loss(
+    tri_loss,
+    local_feat,
+    p_inds=None,
+    n_inds=None,
+    labels=None,
+    normalize_feature=True):
   """
   Args:
     tri_loss: a `TripletLoss` object
@@ -229,7 +240,8 @@ def local_loss(tri_loss, local_feat, p_inds=None, n_inds=None, labels=None):
     dist_ap: pytorch Variable, distance(anchor, positive); shape [N]
     dist_an: pytorch Variable, distance(anchor, negative); shape [N]
   """
-  local_feat = normalize(local_feat, axis=-1)
+  if normalize_feature:
+    local_feat = normalize(local_feat, axis=-1)
   if p_inds is None or n_inds is None:
     dist_mat = local_dist(local_feat, local_feat)
     dist_ap, dist_an = hard_example_mining(dist_mat, labels, return_inds=False)

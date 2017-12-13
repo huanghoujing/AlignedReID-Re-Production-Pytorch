@@ -697,3 +697,12 @@ def print_array(array, fmt='{:.2f}', end=' '):
   s += '\n'
   print(s)
   return s
+
+
+# Great idea from https://github.com/amdegroot/ssd.pytorch
+def str2bool(v):
+  return v.lower() in ("yes", "true", "t", "1")
+
+
+def tight_float_str(x, fmt='{:.4f}'):
+  return fmt.format(x).rstrip('0').rstrip('.')

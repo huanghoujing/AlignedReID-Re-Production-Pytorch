@@ -1,28 +1,37 @@
-import os.path as osp
 from aligned_reid.utils.utils import load_pickle
 from aligned_reid.utils.utils import time_str
+from aligned_reid.utils.utils import str2bool
+from aligned_reid.utils.utils import tight_float_str as tfs
+
 import numpy as np
 import argparse
+import os.path as osp
 
 
 class Config(object):
   def __init__(self):
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-d', '--sys_device_ids',
-                        type=str, default='(0,)')
+    parser.add_argument('-d', '--sys_device_ids', type=str, default='(0,)')
     parser.add_argument('-r', '--run', type=int, default=1)
-    parser.add_argument('--set_seed', action='store_true')
+    parser.add_argument('--set_seed', type=str2bool, default=False)
     parser.add_argument('--dataset', type=str, default='market1501',
                         choices=['market1501', 'cuhk03', 'duke'])
     parser.add_argument('--trainset_part', type=str, default='trainval',
                         choices=['trainval', 'train'])
-    parser.add_argument('--log_to_file', action='store_true')
+    parser.add_argument('--log_to_file', type=str2bool, default=True)
+    parser.add_argument('--normalize_feature', type=str2bool, default=True)
+    parser.add_argument('--local_dist_own_hard_sample',
+                        type=str2bool, default=False)
+    parser.add_argument('-gm', '--global_margin', type=float, default=0.3)
+    parser.add_argument('-lm', '--local_margin', type=float, default=0.3)
     parser.add_argument('-glw', '--g_loss_weight', type=float, default=1.)
     parser.add_argument('-llw', '--l_loss_weight', type=float, default=0.)
+    parser.add_argument('-idlw', '--id_loss_weight', type=float, default=0.)
     parser.add_argument('-gtw', '--g_test_weight', type=float, default=1.)
     parser.add_argument('-ltw', '--l_test_weight', type=float, default=0.)
-    parser.add_argument('--only_test', action='store_true')
+    parser.add_argument('--only_test', type=str2bool, default=False)
+    parser.add_argument('--resume', type=str2bool, default=False)
     parser.add_argument('--exp_dir', type=str, default='')
 
     args = parser.parse_known_args()[0]
@@ -147,9 +156,16 @@ class Config(object):
     # ReID Model  #
     ###############
 
+    self.local_dist_own_hard_sample = args.local_dist_own_hard_sample
+
+    self.normalize_feature = args.normalize_feature
+
     self.local_conv_out_channels = 128
-    self.global_margin = 0.3
-    self.local_margin = 0.3
+    self.global_margin = args.global_margin
+    self.local_margin = args.local_margin
+
+    # Identification Loss weight
+    self.id_loss_weight = args.id_loss_weight
 
     # global loss weight
     self.g_loss_weight = args.g_loss_weight
@@ -169,8 +185,21 @@ class Config(object):
 
     # The root dir of logs.
     if args.exp_dir == '':
-      self.exp_dir = ('exp/tri_loss/{}/train/g{:.4f}_l{:.4f}/run{}'
-        .format(self.dataset, self.g_loss_weight, self.l_loss_weight, self.run))
+      self.exp_dir = osp.join(
+        'exp/tri_loss',
+        '{}'.format(self.dataset),
+        'train',
+        ('nf_' if self.normalize_feature else 'not_nf_') +
+        ('ohs_' if self.local_dist_own_hard_sample else 'not_ohs_') +
+        'gm_{}_'.format(tfs(self.global_margin)) +
+        'lm_{}_'.format(tfs(self.local_margin)) +
+        'glw_{}_'.format(tfs(self.g_loss_weight)) +
+        'llw_{}_'.format(tfs(self.l_loss_weight)) +
+        'idlw_{}_'.format(tfs(self.id_loss_weight)) +
+        'gtw_{}_'.format(tfs(self.g_test_weight)) +
+        'ltw_{}'.format(tfs(self.l_test_weight)),
+        'run{}'.format(self.run),
+      )
     else:
       self.exp_dir = args.exp_dir
 
@@ -193,9 +222,7 @@ class Config(object):
     # Test after training.
     self.test = True
 
-    self.save_ckpt = True
-
-    self.resume = False
+    self.resume = args.resume
 
   @property
   def log_file(self):
@@ -204,11 +231,6 @@ class Config(object):
   @property
   def log_err_file(self):
     return osp.join(self.exp_dir, 'log_stderr_{}.txt'.format(time_str()))
-
-  @property
-  def test_scores_file(self):
-    """Test scores of different runs are appended to this global file."""
-    return osp.join(osp.dirname(self.exp_dir.rstrip('/')), 'test_scores.txt')
 
   @property
   def ckpt_file(self):
