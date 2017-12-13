@@ -30,7 +30,7 @@ Current results on Market1501 with setting
 - global margin 0.3
 - local margin 0.3
 - Adam optimizer
-- Base learning rate 2e-4, decaying exponentially after 75 epochs, 150 epochs in total. Refer to paper (In Defense of the Triplet Loss for Person Re-Identification)[https://arxiv.org/abs/1703.07737].
+- Base learning rate 2e-4, decaying exponentially after 75 epochs, 150 epochs in total. Refer to paper [In Defense of the Triplet Loss for Person Re-Identification](https://arxiv.org/abs/1703.07737).
 
 
 |   | Rank-1 (%) | mAP (%) |
