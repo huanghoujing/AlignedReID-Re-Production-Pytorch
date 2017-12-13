@@ -26,12 +26,15 @@ If you adopt AlignedReID in your research, please cite the paper
   - [ ] Speed up local distance at test time. (Replace numpy by pytorch cuda operation.)
 
 
-Current results on Market1501 with setting
+# Current Results
+
+On Market1501 with setting
 - global margin 0.3
 - local margin 0.3
 - Adam optimizer
-- Base learning rate 2e-4, decaying exponentially after 75 epochs, 150 epochs in total. Refer to paper [In Defense of the Triplet Loss for Person Re-Identification](https://arxiv.org/abs/1703.07737).
+- Base learning rate 2e-4, decaying exponentially after 75 epochs. Train for 150 epochs in total. Refer to paper [In Defense of the Triplet Loss for Person Re-Identification](https://arxiv.org/abs/1703.07737).
 
+We achieve the following results. Note that training data only comes from one dataset, while the paper combines 4 datasets.
 
 |   | Rank-1 (%) | mAP (%) |
 | --- | --- | --- |
@@ -49,7 +52,7 @@ Current results on Market1501 with setting
 | GL-LL-IDL-NNF-LHSFLD-TWLD | 85.51 | 67.77 |
 | GL-LL-IDL-NNF-LHSFLD-TWGALD | 85.45 | 69.47 |
 
-**Notation**
+**Notations for the table**
 - GL: Global Loss
 - LL: Local Loss
 - IDL: IDentification Loss
