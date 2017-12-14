@@ -64,7 +64,13 @@ We achieve the following results. Note that training data only comes from one da
 - TWLD: Test With Local Distance
 - TWGALD: Test With Global And Local Distance
 
-The current number of iterations may be insufficient for training ID Loss. The learning rate decaying function should be adjusted as well.
+The above number of iterations may be insufficient for training ID Loss. When starting decaying at epoch 150 and with total epochs 300, the results are better:
+
+|   | Rank-1 (%) | mAP (%) |
+| --- | --- | --- |
+| GL-LL-IDL-NNF-LHSFLD-TWGD | 86.46 | 70.51 |
+| GL-LL-IDL-NNF-LHSFLD-TWLD | 87.29 | 70.31 |
+| GL-LL-IDL-NNF-LHSFLD-TWGALD | 87.08 | 71.61 |
 
 
 # Installation
@@ -224,7 +230,7 @@ You can run the [TensorBoard](https://github.com/lanpa/tensorboard-pytorch) to w
 tensorboard --logdir exp/tri_loss/market1501/train/not_nf_ohs_gm_0.3_lm_0.3_glw_1_llw_1_idlw_0_gtw_1_ltw_1/run1/tensorboard
 ```
 
-For more usage of TensorBoard, see the help:
+For more usage of TensorBoard, see the website and the help:
 
 ```bash
 tensorboard --help
