@@ -34,6 +34,16 @@ class Config(object):
     parser.add_argument('--resume', type=str2bool, default=False)
     parser.add_argument('--exp_dir', type=str, default='')
 
+    parser.add_argument('--base_lr', type=float, default=2e-4)
+    parser.add_argument('--lr_decay_type', type=str, default='exp',
+                        choices=['exp', 'staircase'])
+    parser.add_argument('--exp_decay_at_epoch', type=int, default=75)
+    parser.add_argument('--staircase_decay_at_epochs',
+                        type=str, default='(100, 200,)')
+    parser.add_argument('--staircase_decay_multiply_factor',
+                        type=float, default=0.1)
+    parser.add_argument('--total_epochs', type=int, default=150)
+
     args = parser.parse_known_args()[0]
 
     # gpu ids
@@ -177,6 +187,32 @@ class Config(object):
     # local distance weight in testing
     self.l_test_weight = args.l_test_weight
 
+    #############
+    # Training  #
+    #############
+
+    self.weight_decay = 0.0005
+
+    # Initial learning rate
+    self.base_lr = args.base_lr
+    self.lr_decay_type = args.lr_decay_type
+    self.exp_decay_at_epoch = args.exp_decay_at_epoch
+    self.staircase_decay_at_epochs = eval(args.staircase_decay_at_epochs)
+    self.staircase_decay_multiply_factor = args.staircase_decay_multiply_factor
+    # Number of epochs to train
+    self.total_epochs = args.total_epochs
+
+    # How often (in batches) to log. If only need to log the average
+    # information for each epoch, set this to a large value, e.g. 1e10.
+    self.log_steps = 1e10
+
+    # Only test and without training.
+    self.only_test = args.only_test
+    # Test after training.
+    self.test = True
+
+    self.resume = args.resume
+
     #######
     # Log #
     #######
@@ -189,6 +225,7 @@ class Config(object):
         'exp/tri_loss',
         '{}'.format(self.dataset),
         'train',
+        #
         ('nf_' if self.normalize_feature else 'not_nf_') +
         ('ohs_' if self.local_dist_own_hard_sample else 'not_ohs_') +
         'gm_{}_'.format(tfs(self.global_margin)) +
@@ -197,32 +234,20 @@ class Config(object):
         'llw_{}_'.format(tfs(self.l_loss_weight)) +
         'idlw_{}_'.format(tfs(self.id_loss_weight)) +
         'gtw_{}_'.format(tfs(self.g_test_weight)) +
-        'ltw_{}'.format(tfs(self.l_test_weight)),
+        'ltw_{}_'.format(tfs(self.l_test_weight)) +
+        'lr_{}_'.format(tfs(self.base_lr)) +
+        '{}_'.format(self.lr_decay_type) +
+        ('decay_at_{}_'.format(self.exp_decay_at_epoch)
+         if self.lr_decay_type == 'exp'
+         else 'decay_at_{}_factor_{}_'.format(
+          args.staircase_decay_at_epochs,
+          tfs(self.staircase_decay_multiply_factor))) +
+        'total_{}'.format(self.total_epochs),
+        #
         'run{}'.format(self.run),
       )
     else:
       self.exp_dir = args.exp_dir
-
-    #############
-    # Training  #
-    #############
-
-    self.weight_decay = 0.0005
-    # Initial learning rate
-    self.lr = 2e-4
-    self.start_decay_epoch = 75
-    # Number of epochs to train
-    self.num_epochs = 150
-    # How often (in batches) to log. If only need to log the average
-    # information for each epoch, set this to a large value, e.g. 1e10.
-    self.log_steps = 1e10
-
-    # Only test and without training.
-    self.only_test = args.only_test
-    # Test after training.
-    self.test = True
-
-    self.resume = args.resume
 
   @property
   def log_file(self):

@@ -706,3 +706,10 @@ def str2bool(v):
 
 def tight_float_str(x, fmt='{:.4f}'):
   return fmt.format(x).rstrip('0').rstrip('.')
+
+
+def find_index(seq, item):
+  for i, x in enumerate(seq):
+    if item == x:
+      return i
+  return -1

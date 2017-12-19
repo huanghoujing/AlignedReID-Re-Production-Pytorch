@@ -22,21 +22,29 @@ from aligned_reid.utils.utils import may_set_mode
 from aligned_reid.utils.utils import load_ckpt
 from aligned_reid.utils.utils import save_ckpt
 from aligned_reid.utils.utils import set_devices
-# from aligned_reid.utils.utils import adjust_lr
 from aligned_reid.utils.utils import AverageMeter
 from aligned_reid.utils.utils import to_scalar
 from aligned_reid.utils.utils import ReDirectSTD
 from aligned_reid.utils.utils import set_seed
 from aligned_reid.utils.utils import get_model_wrapper
 from aligned_reid.utils.utils import print_array
+from aligned_reid.utils.utils import find_index
 
 
-def adjust_lr(optimizer, base_lr, ep, total_ep, tran_ep):
+def adjust_lr_exp(optimizer, base_lr, ep, total_ep, tran_ep):
   if ep > tran_ep:
     for g in optimizer.param_groups:
       g['lr'] = (base_lr *
                  (0.001 ** (float(ep - tran_ep) / (total_ep - tran_ep))))
-      print('=====> lr adjusted to {:.10f}'.format(g['lr']).rstrip('0'))
+    print('=====> lr adjusted to {:.10f}'.format(g['lr']).rstrip('0'))
+
+
+def adjust_lr_staircase(optimizer, base_lr, ep, decay_epochs, factor):
+  if ep in decay_epochs:
+    ind = find_index(decay_epochs, ep)
+    for g in optimizer.param_groups:
+      g['lr'] = base_lr * factor ** (ind + 1)
+    print('=====> lr adjusted to {:.10f}'.format(g['lr']).rstrip('0'))
 
 
 def main():
@@ -55,10 +63,8 @@ def main():
   import pprint
   pprint.pprint(cfg.__dict__)
 
-  if cfg.log_to_file:
-    writer = SummaryWriter(log_dir=osp.join(cfg.exp_dir, 'tensorboard'))
-  else:
-    writer = None
+  # lazily creating SummaryWriter
+  writer = None
 
   ###########
   # Models  #
@@ -77,7 +83,7 @@ def main():
   l_tri_loss = TripletLoss(margin=cfg.local_margin)
 
   optimizer = optim.Adam(model.parameters(),
-                         lr=cfg.lr,
+                         lr=cfg.base_lr,
                          weight_decay=cfg.weight_decay)
 
   modules_optims = [model, optimizer]
@@ -136,8 +142,22 @@ def main():
 
   best_score = scores if cfg.resume else 0
   start_ep = resume_ep if cfg.resume else 0
-  for ep in range(start_ep, cfg.num_epochs):
-    adjust_lr(optimizer, cfg.lr, ep, cfg.num_epochs, cfg.start_decay_epoch)
+  for ep in range(start_ep, cfg.total_epochs):
+    if cfg.lr_decay_type == 'exp':
+      adjust_lr_exp(
+        optimizer,
+        cfg.base_lr,
+        ep,
+        cfg.total_epochs,
+        cfg.exp_decay_at_epoch)
+    else:
+      adjust_lr_staircase(
+        optimizer,
+        cfg.base_lr,
+        ep,
+        cfg.staircase_decay_at_epochs,
+        cfg.staircase_decay_multiply_factor)
+
     may_set_mode(modules_optims, 'train')
 
     epoch_done = False
@@ -311,6 +331,8 @@ def main():
     # Log to TensorBoard
 
     if cfg.log_to_file:
+      if writer is None:
+        writer = SummaryWriter(log_dir=osp.join(cfg.exp_dir, 'tensorboard'))
       writer.add_scalars(
         'loss',
         dict(global_loss=g_loss_meter.avg,
