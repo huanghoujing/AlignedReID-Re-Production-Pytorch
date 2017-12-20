@@ -12,13 +12,20 @@ class Config(object):
   def __init__(self):
 
     parser = argparse.ArgumentParser()
+    # One device for one model in the case of mutual learning.
     parser.add_argument('-d', '--sys_device_ids', type=str, default='(0,)')
+    parser.add_argument('--num_models', type=int, default=1)
     parser.add_argument('-r', '--run', type=int, default=1)
     parser.add_argument('--set_seed', type=str2bool, default=False)
     parser.add_argument('--dataset', type=str, default='market1501',
                         choices=['market1501', 'cuhk03', 'duke'])
     parser.add_argument('--trainset_part', type=str, default='trainval',
                         choices=['trainval', 'train'])
+
+    # Only for training set.
+    parser.add_argument('--ids_per_batch', type=int, default=32)
+    parser.add_argument('--ims_per_id', type=int, default=4)
+
     parser.add_argument('--log_to_file', type=str2bool, default=True)
     parser.add_argument('--normalize_feature', type=str2bool, default=True)
     parser.add_argument('--local_dist_own_hard_sample',
@@ -28,8 +35,10 @@ class Config(object):
     parser.add_argument('-glw', '--g_loss_weight', type=float, default=1.)
     parser.add_argument('-llw', '--l_loss_weight', type=float, default=0.)
     parser.add_argument('-idlw', '--id_loss_weight', type=float, default=0.)
-    parser.add_argument('-gtw', '--g_test_weight', type=float, default=1.)
-    parser.add_argument('-ltw', '--l_test_weight', type=float, default=0.)
+    parser.add_argument('-pmlw', '--pm_loss_weight', type=float, default=1.)
+    parser.add_argument('-gdmlw', '--gdm_loss_weight', type=float, default=1.)
+    parser.add_argument('-ldmlw', '--ldm_loss_weight', type=float, default=0.)
+
     parser.add_argument('--only_test', type=str2bool, default=False)
     parser.add_argument('--resume', type=str2bool, default=False)
     parser.add_argument('--exp_dir', type=str, default='')
@@ -102,8 +111,8 @@ class Config(object):
     # Dividing is applied only when subtracting mean is applied.
     self.im_std = [0.229, 0.224, 0.225]
 
-    self.ids_per_batch = 32
-    self.ims_per_id = 4
+    self.ids_per_batch = args.ids_per_batch
+    self.ims_per_id = args.ims_per_id
     self.train_final_batch = True
     self.train_mirror_type = ['random', 'always', None][0]
     self.train_shuffle = True
@@ -138,18 +147,6 @@ class Config(object):
       prng=prng)
     self.train_set_kwargs.update(dataset_kwargs)
 
-    # prng = np.random
-    # if self.seed is not None:
-    #   prng = np.random.RandomState(self.seed)
-    # self.val_set_kwargs = dict(
-    #   part='val',
-    #   batch_size=self.test_batch_size,
-    #   final_batch=self.test_final_batch,
-    #   shuffle=self.test_shuffle,
-    #   mirror_type=self.test_mirror_type,
-    #   prng=prng)
-    # self.val_set_kwargs.update(dataset_kwargs)
-
     prng = np.random
     if self.seed is not None:
       prng = np.random.RandomState(self.seed)
@@ -182,10 +179,22 @@ class Config(object):
     # local loss weight
     self.l_loss_weight = args.l_loss_weight
 
-    # global distance weight in testing
-    self.g_test_weight = args.g_test_weight
-    # local distance weight in testing
-    self.l_test_weight = args.l_test_weight
+    # probability mutual loss weight
+    self.pm_loss_weight = args.pm_loss_weight
+    # global distance mutual loss weight
+    self.gdm_loss_weight = args.gdm_loss_weight
+    # local distance mutual loss weight
+    self.ldm_loss_weight = args.ldm_loss_weight
+
+    ###############
+    # Mutual Loss #
+    ###############
+
+    self.num_models = args.num_models
+    # See method `set_devices_for_ml` in `aligned_reid/utils/utils.py` for
+    # details.
+    assert len(self.sys_device_ids) == self.num_models, \
+      'You should specify device for each model.'
 
     #############
     # Training  #
@@ -208,8 +217,6 @@ class Config(object):
 
     # Only test and without training.
     self.only_test = args.only_test
-    # Test after training.
-    self.test = True
 
     self.resume = args.resume
 
@@ -233,8 +240,9 @@ class Config(object):
         'glw_{}_'.format(tfs(self.g_loss_weight)) +
         'llw_{}_'.format(tfs(self.l_loss_weight)) +
         'idlw_{}_'.format(tfs(self.id_loss_weight)) +
-        'gtw_{}_'.format(tfs(self.g_test_weight)) +
-        'ltw_{}_'.format(tfs(self.l_test_weight)) +
+        'pmlw_{}_'.format(tfs(self.pm_loss_weight)) +
+        'gdmlw_{}_'.format(tfs(self.gdm_loss_weight)) +
+        'ldmlw_{}_'.format(tfs(self.ldm_loss_weight)) +
         'lr_{}_'.format(tfs(self.base_lr)) +
         '{}_'.format(self.lr_decay_type) +
         ('decay_at_{}_'.format(self.exp_decay_at_epoch)
@@ -260,7 +268,3 @@ class Config(object):
   @property
   def ckpt_file(self):
     return osp.join(self.exp_dir, 'ckpt.pth')
-
-  @property
-  def best_ckpt_file(self):
-    return osp.join(self.exp_dir, 'best_ckpt.pth')

@@ -178,6 +178,58 @@ def set_devices(sys_device_ids):
   return TVT, TMO
 
 
+def set_devices_for_ml(sys_device_ids):
+  """This version is for mutual learning, one model only on one device, 
+  while several models are allowed to share one device.
+  
+  It sets some GPUs to be visible and returns some wrappers to transferring 
+  Variables/Tensors and Modules/Optimizers.
+  
+  Args:
+    sys_device_ids: which devices to use, len(sys_device_ids) should be equal to 
+      number of models. Examples:
+        
+      sys_device_ids = (-1, -1)
+        the two models both on CPU
+      sys_device_ids = (-1, 2)
+        the 1st model on CPU, the 2nd model on GPU 2
+      sys_device_ids = (3,)
+        the only one model on the 4th gpu 
+      sys_device_ids = (0, 1, 2, 3)
+        the 4 models on first 4 gpus respectively
+      sys_device_ids = (0, 0)
+        the two models both on GPU 0
+      sys_device_ids = (0, 0, 1, 1)
+        the 1st and 2nd model on GPU 0, the 3rd and 4th model on GPU 1
+  
+  Returns:
+    
+  """
+  # Set the CUDA_VISIBLE_DEVICES environment variable
+
+  import os
+
+  unique_sys_device_ids = list(set(sys_device_ids))
+  unique_sys_device_ids.sort()
+  if -1 in unique_sys_device_ids:
+    unique_sys_device_ids.remove(-1)
+
+  visible_devices = ''
+  for i in unique_sys_device_ids:
+    visible_devices += '{}, '.format(i)
+  os.environ['CUDA_VISIBLE_DEVICES'] = visible_devices
+
+  # Return wrappers
+
+  TVTs, TMOs = [], []
+  for id in sys_device_ids:
+    if id != -1:
+      id = find_index(unique_sys_device_ids, id)
+    TVTs.append(TransferVarTensor(id))
+    TMOs.append(TransferModulesOptims(id))
+  return TVTs, TMOs
+
+
 def load_ckpt(modules_optims, ckpt_file, load_to_cpu=True, verbose=True):
   """Load state_dict's of modules/optimizers from file.
   Args:

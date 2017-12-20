@@ -200,6 +200,10 @@ def global_loss(tri_loss, global_feat, labels, normalize_feature=True):
     =============
     dist_ap: pytorch Variable, distance(anchor, positive); shape [N]
     dist_an: pytorch Variable, distance(anchor, negative); shape [N]
+    ===================
+    For Mutual Learning
+    ===================
+    dist_mat: pytorch Variable, pairwise euclidean distance; shape [N, N]
   """
   if normalize_feature:
     global_feat = normalize(global_feat, axis=-1)
@@ -208,7 +212,7 @@ def global_loss(tri_loss, global_feat, labels, normalize_feature=True):
   dist_ap, dist_an, p_inds, n_inds = hard_example_mining(
     dist_mat, labels, return_inds=True)
   loss = tri_loss(dist_ap, dist_an)
-  return loss, p_inds, n_inds, dist_ap, dist_an
+  return loss, p_inds, n_inds, dist_ap, dist_an, dist_mat
 
 
 def local_loss(
@@ -239,6 +243,10 @@ def local_loss(
     =============
     dist_ap: pytorch Variable, distance(anchor, positive); shape [N]
     dist_an: pytorch Variable, distance(anchor, negative); shape [N]
+    ===================
+    For Mutual Learning
+    ===================
+    dist_mat: pytorch Variable, pairwise local distance; shape [N, N]
   """
   if normalize_feature:
     local_feat = normalize(local_feat, axis=-1)
@@ -249,4 +257,6 @@ def local_loss(
     dist_ap = batch_local_dist(local_feat, local_feat[p_inds])
     dist_an = batch_local_dist(local_feat, local_feat[n_inds])
   loss = tri_loss(dist_ap, dist_an)
+  if p_inds is None or n_inds is None:
+    return loss, dist_ap, dist_an, dist_mat
   return loss, dist_ap, dist_an
