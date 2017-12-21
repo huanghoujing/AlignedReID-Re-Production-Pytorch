@@ -158,14 +158,12 @@ class TestSet(Dataset):
   def eval(
       self,
       normalize_feat=True,
-      global_weight=1.,
-      local_weight=0.,
+      use_local_distance=False,
       pool_type='average'):
     """Evaluate using metric CMC and mAP.
     Args:
       normalize_feat: whether to normalize features before computing distance
-      global_weight: weight of global distance
-      local_weight: weight of local distance
+      use_local_distance: whether to use local distance
       pool_type: 'average' or 'max', only for multi-query case
     """
     st = time.time()
@@ -173,21 +171,26 @@ class TestSet(Dataset):
     global_feats, local_feats, ids, cams, im_names, marks = \
       self.extract_feat(normalize_feat)
     print('Done, {:.2f}s'.format(time.time() - st))
+
     q_inds = marks == 0
     g_inds = marks == 1
     mq_inds = marks == 2
 
-    q_g_dist = 0
+    ###################
+    # Global Distance #
+    ###################
 
-    if global_weight > 0:
-      st = time.time()
-      print('Computing global distance...')
-      global_q_g_dist = compute_dist(
-        global_feats[q_inds], global_feats[g_inds], type='euclidean')
-      print('Done, {:.2f}s'.format(time.time() - st))
-      q_g_dist += global_q_g_dist
+    st = time.time()
+    print('Computing global distance...')
+    global_q_g_dist = compute_dist(
+      global_feats[q_inds], global_feats[g_inds], type='euclidean')
+    print('Done, {:.2f}s'.format(time.time() - st))
 
-    if local_weight > 0:
+    ##################
+    # Local Distance #
+    ##################
+
+    if use_local_distance:
       st = time.time()
       last_time = time.time()
       print('Computing local distance...')
@@ -209,12 +212,14 @@ class TestSet(Dataset):
       local_q_g_dist = np.concatenate(local_q_g_dist, axis=1)
       print('Done, {:.2f}s'.format(time.time() - st))
 
-      q_g_dist += local_q_g_dist
+    ##################
+    # Compute Scores #
+    ##################
 
     st = time.time()
-    print('Computing scores...')
+    print('Computing scores for Global Distance')
     mAP, cmc_scores = self.eval_map_cmc(
-      q_g_dist=q_g_dist,
+      q_g_dist=global_q_g_dist,
       q_ids=ids[q_inds], g_ids=ids[g_inds],
       q_cams=cams[q_inds], g_cams=cams[g_inds],
       separate_camera_set=self.separate_camera_set,
@@ -222,6 +227,33 @@ class TestSet(Dataset):
       first_match_break=self.first_match_break,
       topk=10)
     print('Done, {:.2f}s'.format(time.time() - st))
+
+
+    if use_local_distance:
+
+      st = time.time()
+      print('Computing scores for Local Distance')
+      mAP, cmc_scores = self.eval_map_cmc(
+        q_g_dist=local_q_g_dist,
+        q_ids=ids[q_inds], g_ids=ids[g_inds],
+        q_cams=cams[q_inds], g_cams=cams[g_inds],
+        separate_camera_set=self.separate_camera_set,
+        single_gallery_shot=self.single_gallery_shot,
+        first_match_break=self.first_match_break,
+        topk=10)
+      print('Done, {:.2f}s'.format(time.time() - st))
+
+      st = time.time()
+      print('Computing scores for Global+Local Distance')
+      mAP, cmc_scores = self.eval_map_cmc(
+        q_g_dist=global_q_g_dist + local_q_g_dist,
+        q_ids=ids[q_inds], g_ids=ids[g_inds],
+        q_cams=cams[q_inds], g_cams=cams[g_inds],
+        separate_camera_set=self.separate_camera_set,
+        single_gallery_shot=self.single_gallery_shot,
+        first_match_break=self.first_match_break,
+        topk=10)
+      print('Done, {:.2f}s'.format(time.time() - st))
 
     # multi-query
     # TODO: allow local distance in Multi Query

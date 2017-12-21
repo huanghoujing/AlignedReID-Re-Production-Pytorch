@@ -10,6 +10,7 @@ import time
 import shutil
 import os.path as osp
 from tensorboardX import SummaryWriter
+import threading
 
 from train_cfg import Config
 
@@ -80,6 +81,9 @@ def main():
     ReDirectSTD(cfg.log_file, 'stdout', False)
     ReDirectSTD(cfg.log_err_file, 'stderr', False)
 
+  # Lazily create SummaryWriter
+  writer = None
+
   TVTs, TMOs = set_devices_for_ml(cfg.sys_device_ids)
 
   if cfg.seed is not None:
@@ -91,9 +95,6 @@ def main():
   print('cfg.__dict__')
   pprint.pprint(cfg.__dict__)
   print('-' * 60)
-
-  # lazily creating SummaryWriter
-  writer = None
 
   ###########
   # Models  #
@@ -142,6 +143,7 @@ def main():
   # Test #
   ########
 
+  # Test each model using different distance settings.
   def test(load_from_ckpt=False):
     if load_from_ckpt:
       load_ckpt(modules_optims, cfg.ckpt_file)
@@ -149,23 +151,12 @@ def main():
     for i in range(len(models)):
       test_set.set_feat_func(ExtractFeature(models[i], TVTs[i]))
 
-      print('=====> Test Model {}, Using Global Distance'.format(i + 1))
+      print('=====> Test Model {}'.format(i + 1))
+      use_local_distance = (cfg.l_loss_weight > 0) \
+                           and cfg.local_dist_own_hard_sample
       test_set.eval(
         normalize_feat=cfg.normalize_feature,
-        global_weight=1,
-        local_weight=0)
-
-      print('=====> Test Model {}, Using Local Distance'.format(i + 1))
-      test_set.eval(
-        normalize_feat=cfg.normalize_feature,
-        global_weight=0,
-        local_weight=1)
-
-      print('=====> Test Model {}, Using Global+Local Distance'.format(i + 1))
-      test_set.eval(
-        normalize_feat=cfg.normalize_feature,
-        global_weight=1,
-        local_weight=1)
+        use_local_distance=use_local_distance)
 
   if cfg.only_test:
     test(load_from_ckpt=True)
@@ -174,6 +165,206 @@ def main():
   ############
   # Training #
   ############
+
+  # Storing things that can be accessed cross threads.
+
+  ims_list = [None for _ in range(cfg.num_models)]
+  labels_list = [None for _ in range(cfg.num_models)]
+
+  done_list1 = [False for _ in range(cfg.num_models)]
+  done_list2 = [False for _ in range(cfg.num_models)]
+
+  probs_list = [None for _ in range(cfg.num_models)]
+  g_dist_mat_list = [None for _ in range(cfg.num_models)]
+  l_dist_mat_list = [None for _ in range(cfg.num_models)]
+
+  # Two phases for each model:
+  # 1) forward and single-model loss;
+  # 2) further add mutual loss and backward.
+  # The 2nd phase is only ready to start when the 1st is finished for
+  # all models.
+  run_event1 = threading.Event()
+  run_event2 = threading.Event()
+
+  # This event is meant to be set to stop threads. However, as I found, with
+  # `daemon` set to true when creating threads, manually stopping is
+  # unnecessary. I guess some main-thread variables required by sub-threads
+  # are destroyed when the main thread ends, thus the sub-threads throw errors
+  # and exit too.
+  # Real reason should be further explored.
+  exit_event = threading.Event()
+
+  # The function to be called by threads.
+  def thread_target(i):
+    while not exit_event.isSet():
+      # If the run event is not set, the thread just waits.
+      if not run_event1.wait(0.001): continue
+
+      ######################################
+      # Phase 1: Forward and Separate Loss #
+      ######################################
+
+      TVT = TVTs[i]
+      model = models[i]
+      ims = ims_list[i]
+      labels = labels_list[i]
+      optimizer = optimizers[i]
+
+      ims_var = Variable(TVT(torch.from_numpy(ims).float()))
+      labels_t = TVT(torch.from_numpy(labels).long())
+      labels_var = Variable(labels_t)
+
+      global_feat, local_feat, logits = model(ims_var)
+      probs = F.softmax(logits)
+      log_probs = F.log_softmax(logits)
+
+      g_loss, p_inds, n_inds, g_dist_ap, g_dist_an, g_dist_mat = global_loss(
+        g_tri_loss, global_feat, labels_t,
+        normalize_feature=cfg.normalize_feature)
+
+      if cfg.l_loss_weight == 0:
+        l_loss, l_dist_mat = 0, 0
+      elif cfg.local_dist_own_hard_sample:
+        # Let local distance find its own hard samples.
+        l_loss, l_dist_ap, l_dist_an, l_dist_mat = local_loss(
+          l_tri_loss, local_feat, None, None, labels_t,
+          normalize_feature=cfg.normalize_feature)
+      else:
+        l_loss, l_dist_ap, l_dist_an = local_loss(
+          l_tri_loss, local_feat, p_inds, n_inds, labels_t,
+          normalize_feature=cfg.normalize_feature)
+        l_dist_mat = 0
+
+      id_loss = 0
+      if cfg.id_loss_weight > 0:
+        id_loss = id_criterion(logits, labels_var)
+
+      probs_list[i] = probs
+      g_dist_mat_list[i] = g_dist_mat
+      l_dist_mat_list[i] = l_dist_mat
+
+      done_list1[i] = True
+
+      # Wait for event to be set, meanwhile checking if need to exit.
+      while True:
+        phase2_ready = run_event2.wait(0.001)
+        if exit_event.isSet():
+          return
+        if phase2_ready:
+          break
+
+      #####################################
+      # Phase 2: Mutual Loss and Backward #
+      #####################################
+
+      # Probability Mutual Loss (KL Loss)
+      pm_loss = 0
+      if (cfg.num_models > 1) and (cfg.pm_loss_weight > 0):
+        for j in range(cfg.num_models):
+          if j != i:
+            pm_loss += F.kl_div(log_probs, TVT(probs_list[j]).detach(), False)
+        pm_loss /= 1. * (cfg.num_models - 1) * len(ims)
+
+      # Global Distance Mutual Loss (L2 Loss)
+      gdm_loss = 0
+      if (cfg.num_models > 1) and (cfg.gdm_loss_weight > 0):
+        for j in range(cfg.num_models):
+          if j != i:
+            gdm_loss += torch.sum(torch.pow(
+              g_dist_mat - TVT(g_dist_mat_list[j]).detach(), 2))
+        gdm_loss /= 1. * (cfg.num_models - 1) * len(ims) * len(ims)
+
+      # Local Distance Mutual Loss (L2 Loss)
+      ldm_loss = 0
+      if (cfg.num_models > 1) \
+          and cfg.local_dist_own_hard_sample \
+          and (cfg.ldm_loss_weight > 0):
+        for j in range(cfg.num_models):
+          if j != i:
+            ldm_loss += torch.sum(torch.pow(
+              l_dist_mat - TVT(l_dist_mat_list[j]).detach(), 2))
+        ldm_loss /= 1. * (cfg.num_models - 1) * len(ims) * len(ims)
+
+      loss = g_loss * cfg.g_loss_weight \
+             + l_loss * cfg.l_loss_weight \
+             + id_loss * cfg.id_loss_weight \
+             + pm_loss * cfg.pm_loss_weight \
+             + gdm_loss * cfg.gdm_loss_weight \
+             + ldm_loss * cfg.ldm_loss_weight
+
+      optimizer.zero_grad()
+      loss.backward()
+      optimizer.step()
+
+      ##################################
+      # Step Log For One of the Models #
+      ##################################
+
+      # These meters are outer-scope variables
+
+      # Just record for the first model
+      if i == 0:
+
+        # precision
+        g_prec = (g_dist_an > g_dist_ap).data.float().mean()
+        # the proportion of triplets that satisfy margin
+        g_m = (g_dist_an > g_dist_ap + cfg.global_margin).data.float().mean()
+        g_d_ap = g_dist_ap.data.mean()
+        g_d_an = g_dist_an.data.mean()
+
+        g_prec_meter.update(g_prec)
+        g_m_meter.update(g_m)
+        g_dist_ap_meter.update(g_d_ap)
+        g_dist_an_meter.update(g_d_an)
+        g_loss_meter.update(to_scalar(g_loss))
+
+        if cfg.l_loss_weight > 0:
+          # precision
+          l_prec = (l_dist_an > l_dist_ap).data.float().mean()
+          # the proportion of triplets that satisfy margin
+          l_m = (l_dist_an > l_dist_ap + cfg.local_margin).data.float().mean()
+          l_d_ap = l_dist_ap.data.mean()
+          l_d_an = l_dist_an.data.mean()
+
+          l_prec_meter.update(l_prec)
+          l_m_meter.update(l_m)
+          l_dist_ap_meter.update(l_d_ap)
+          l_dist_an_meter.update(l_d_an)
+          l_loss_meter.update(to_scalar(l_loss))
+
+        if cfg.id_loss_weight > 0:
+          id_loss_meter.update(to_scalar(id_loss))
+
+        if (cfg.num_models > 1) and (cfg.pm_loss_weight > 0):
+          pm_loss_meter.update(to_scalar(pm_loss))
+
+        if (cfg.num_models > 1) and (cfg.gdm_loss_weight > 0):
+          gdm_loss_meter.update(to_scalar(gdm_loss))
+
+        if (cfg.num_models > 1) \
+            and cfg.local_dist_own_hard_sample \
+            and (cfg.ldm_loss_weight > 0):
+          ldm_loss_meter.update(to_scalar(ldm_loss))
+
+        loss_meter.update(to_scalar(loss))
+
+      ###################
+      # End Up One Step #
+      ###################
+
+      run_event1.clear()
+      run_event2.clear()
+
+      done_list2[i] = True
+
+
+  threads = []
+  for i in range(cfg.num_models):
+    thread = threading.Thread(target=thread_target, args=(i,))
+    # Set the thread in daemon mode, so that the main program ends normally.
+    thread.daemon = True
+    thread.start()
+    threads.append(thread)
 
   start_ep = resume_ep if cfg.resume else 0
   for ep in range(start_ep, cfg.total_epochs):
@@ -231,159 +422,23 @@ def main():
 
       ims, im_names, labels, mirrored, epoch_done = train_set.next_batch()
 
-      ims_var_list = [Variable(TVT(torch.from_numpy(ims).float()))
-                      for TVT in TVTs]
-      labels_t_list = [TVT(torch.from_numpy(labels).long())
-                       for TVT in TVTs]
-      labels_var_list = [Variable(labels_t)
-                         for labels_t in labels_t_list]
+      for i in range(cfg.num_models):
+        ims_list[i] = ims
+        labels_list[i] = labels
+        done_list1[i] = False
+        done_list2[i] = False
 
-      g_loss_list = []
-      l_loss_list = []
-      id_loss_list = []
+      run_event1.set()
+      # Waiting for phase 1 done
+      while not all(done_list1): continue
 
-      probs_list = []
-      log_probs_list = []
+      run_event2.set()
+      # Waiting for phase 2 done
+      while not all(done_list2): continue
 
-      g_dist_mat_list = []
-      l_dist_mat_list = []
-
-      for model, ims_var, labels_t, labels_var in zip(
-          models, ims_var_list, labels_t_list, labels_var_list):
-        global_feat, local_feat, logits = model(ims_var)
-
-        g_loss, p_inds, n_inds, g_dist_ap, g_dist_an, g_dist_mat = global_loss(
-          g_tri_loss, global_feat, labels_t,
-          normalize_feature=cfg.normalize_feature)
-
-        if cfg.l_loss_weight == 0:
-          l_loss, l_dist_mat = 0, 0
-        elif cfg.local_dist_own_hard_sample:
-          # Let local distance find its own hard samples.
-          l_loss, l_dist_ap, l_dist_an, l_dist_mat = local_loss(
-            l_tri_loss, local_feat, None, None, labels_t,
-            normalize_feature=cfg.normalize_feature)
-        else:
-          l_loss, l_dist_ap, l_dist_an = local_loss(
-            l_tri_loss, local_feat, p_inds, n_inds, labels_t,
-            normalize_feature=cfg.normalize_feature)
-          l_dist_mat = 0
-
-        id_loss = 0
-        if cfg.id_loss_weight > 0:
-          id_loss = id_criterion(logits, labels_var)
-
-        g_loss_list.append(g_loss)
-        l_loss_list.append(l_loss)
-        id_loss_list.append(id_loss)
-
-        probs_list.append(F.softmax(logits))
-        log_probs_list.append(F.log_softmax(logits))
-
-        g_dist_mat_list.append(g_dist_mat)
-        l_dist_mat_list.append(l_dist_mat)
-
-
-      ###################
-      # Mutual Learning #
-      ###################
-
-      for i, (g_loss, l_loss, id_loss,
-              log_probs,
-              g_dist_mat, l_dist_mat,
-              optimizer, TVT) in enumerate(zip(
-        g_loss_list, l_loss_list, id_loss_list,
-        log_probs_list,
-        g_dist_mat_list, l_dist_mat_list,
-        optimizers, TVTs)):
-
-        # Probability Mutual Loss (KL Loss)
-        pm_loss = 0
-        if (cfg.num_models > 1) and (cfg.pm_loss_weight > 0):
-          for j in range(cfg.num_models):
-            if j != i:
-              pm_loss += F.kl_div(log_probs, TVT(probs_list[j]).detach(), False)
-          pm_loss /= 1. * (cfg.num_models - 1) * len(ims)
-
-        # Global Distance Mutual Loss (L2 Loss)
-        gdm_loss = 0
-        if (cfg.num_models > 1) and (cfg.gdm_loss_weight > 0):
-          for j in range(cfg.num_models):
-            if j != i:
-              gdm_loss += torch.sum(torch.pow(
-                g_dist_mat - TVT(g_dist_mat_list[j]).detach(), 2))
-          gdm_loss /= 1. * (cfg.num_models - 1) * len(ims) * len(ims)
-
-        # Local Distance Mutual Loss (L2 Loss)
-        ldm_loss = 0
-        if (cfg.num_models > 1) \
-            and cfg.local_dist_own_hard_sample \
-            and (cfg.ldm_loss_weight > 0):
-          for j in range(cfg.num_models):
-            if j != i:
-              ldm_loss += torch.sum(torch.pow(
-                l_dist_mat - TVT(l_dist_mat_list[j]).detach(), 2))
-          ldm_loss /= 1. * (cfg.num_models - 1) * len(ims) * len(ims)
-
-        loss = g_loss * cfg.g_loss_weight \
-                + l_loss * cfg.l_loss_weight \
-                + id_loss * cfg.id_loss_weight \
-                + pm_loss * cfg.pm_loss_weight \
-                + gdm_loss * cfg.gdm_loss_weight \
-                + ldm_loss * cfg.ldm_loss_weight
-
-        optimizer.zero_grad()
-        loss.backward()
-
-      for optimizer in optimizers:
-        optimizer.step()
-
-      ###############################
-      # Step Log For The Last Model #
-      ###############################
-
-      # precision
-      g_prec = (g_dist_an > g_dist_ap).data.float().mean()
-      # the proportion of triplets that satisfy margin
-      g_m = (g_dist_an > g_dist_ap + cfg.global_margin).data.float().mean()
-      g_d_ap = g_dist_ap.data.mean()
-      g_d_an = g_dist_an.data.mean()
-
-      g_prec_meter.update(g_prec)
-      g_m_meter.update(g_m)
-      g_dist_ap_meter.update(g_d_ap)
-      g_dist_an_meter.update(g_d_an)
-      g_loss_meter.update(to_scalar(g_loss))
-
-      if cfg.l_loss_weight > 0:
-        # precision
-        l_prec = (l_dist_an > l_dist_ap).data.float().mean()
-        # the proportion of triplets that satisfy margin
-        l_m = (l_dist_an > l_dist_ap + cfg.local_margin).data.float().mean()
-        l_d_ap = l_dist_ap.data.mean()
-        l_d_an = l_dist_an.data.mean()
-
-        l_prec_meter.update(l_prec)
-        l_m_meter.update(l_m)
-        l_dist_ap_meter.update(l_d_ap)
-        l_dist_an_meter.update(l_d_an)
-        l_loss_meter.update(to_scalar(l_loss))
-
-      if cfg.id_loss_weight > 0:
-        id_loss_meter.update(to_scalar(id_loss))
-
-      if (cfg.num_models > 1) and (cfg.pm_loss_weight > 0):
-        pm_loss_meter.update(to_scalar(pm_loss))
-
-      if (cfg.num_models > 1) and (cfg.gdm_loss_weight > 0):
-        gdm_loss_meter.update(to_scalar(gdm_loss))
-
-      if (cfg.num_models > 1) \
-            and cfg.local_dist_own_hard_sample \
-            and (cfg.ldm_loss_weight > 0):
-        ldm_loss_meter.update(to_scalar(ldm_loss))
-
-      loss_meter.update(to_scalar(loss))
+      ############
+      # Step Log #
+      ############
 
       if step % cfg.log_steps == 0:
         time_log = '\tStep {}/Ep {}, {:.2f}s'.format(
