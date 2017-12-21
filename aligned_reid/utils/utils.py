@@ -157,13 +157,14 @@ def set_devices(sys_device_ids):
   It sets some GPUs to be visible and returns some wrappers to transferring 
   Variables/Tensors and Modules/Optimizers.
   Args:
-    sys_device_ids: which GPUs to use
+    sys_device_ids: a tuple; which GPUs to use
       e.g.  sys_device_ids = (), only use cpu
             sys_device_ids = (3,), use the 4th gpu
             sys_device_ids = (0, 1, 2, 3,), use first 4 gpus
             sys_device_ids = (0, 2, 4,), use the 1st, 3rd and 5th gpus
   Returns:
-    
+    TVT: a `TransferVarTensor` callable
+    TMO: a `TransferModulesOptims` callable
   """
   # Set the CUDA_VISIBLE_DEVICES environment variable
   import os
@@ -171,7 +172,9 @@ def set_devices(sys_device_ids):
   for i in sys_device_ids:
     visible_devices += '{}, '.format(i)
   os.environ['CUDA_VISIBLE_DEVICES'] = visible_devices
-  # Return wrappers
+  # Return wrappers.
+  # Models and user defined Variables/Tensors would be transferred to the
+  # first device.
   device_id = 0 if len(sys_device_ids) > 0 else -1
   TVT = TransferVarTensor(device_id)
   TMO = TransferModulesOptims(device_id)
@@ -179,40 +182,45 @@ def set_devices(sys_device_ids):
 
 
 def set_devices_for_ml(sys_device_ids):
-  """This version is for mutual learning, one model only on one device, 
-  while several models are allowed to share one device.
+  """This version is for mutual learning.
   
   It sets some GPUs to be visible and returns some wrappers to transferring 
   Variables/Tensors and Modules/Optimizers.
   
   Args:
-    sys_device_ids: which devices to use, len(sys_device_ids) should be equal to 
-      number of models. Examples:
+    sys_device_ids: a tuple of tuples; which devices to use for each model, 
+      len(sys_device_ids) should be equal to number of models. Examples:
         
-      sys_device_ids = (-1, -1)
+      sys_device_ids = ((-1,), (-1,))
         the two models both on CPU
-      sys_device_ids = (-1, 2)
+      sys_device_ids = ((-1,), (2,))
         the 1st model on CPU, the 2nd model on GPU 2
-      sys_device_ids = (3,)
+      sys_device_ids = ((3,),)
         the only one model on the 4th gpu 
-      sys_device_ids = (0, 1, 2, 3)
-        the 4 models on first 4 gpus respectively
-      sys_device_ids = (0, 0)
+      sys_device_ids = ((0, 1), (2, 3))
+        the 1st model on GPU 0 and 1, the 2nd model on GPU 2 and 3
+      sys_device_ids = ((0,), (0,))
         the two models both on GPU 0
-      sys_device_ids = (0, 0, 1, 1)
+      sys_device_ids = ((0,), (0,), (1,), (1,))
         the 1st and 2nd model on GPU 0, the 3rd and 4th model on GPU 1
   
   Returns:
-    
+    TVTs: a list of `TransferVarTensor` callables, one for one model.
+    TMOs: a list of `TransferModulesOptims` callables, one for one model.
+    relative_device_ids: a list of lists; `sys_device_ids` transformed to 
+      relative ids; to be used in `DataParallel`
   """
-  # Set the CUDA_VISIBLE_DEVICES environment variable
-
   import os
 
-  unique_sys_device_ids = list(set(sys_device_ids))
+  all_ids = []
+  for ids in sys_device_ids:
+    all_ids += ids
+  unique_sys_device_ids = list(set(all_ids))
   unique_sys_device_ids.sort()
   if -1 in unique_sys_device_ids:
     unique_sys_device_ids.remove(-1)
+
+  # Set the CUDA_VISIBLE_DEVICES environment variable
 
   visible_devices = ''
   for i in unique_sys_device_ids:
@@ -221,13 +229,21 @@ def set_devices_for_ml(sys_device_ids):
 
   # Return wrappers
 
+  relative_device_ids = []
   TVTs, TMOs = [], []
-  for id in sys_device_ids:
-    if id != -1:
-      id = find_index(unique_sys_device_ids, id)
-    TVTs.append(TransferVarTensor(id))
-    TMOs.append(TransferModulesOptims(id))
-  return TVTs, TMOs
+  for ids in sys_device_ids:
+    relative_ids = []
+    for id in ids:
+      if id != -1:
+        id = find_index(unique_sys_device_ids, id)
+      relative_ids.append(id)
+    relative_device_ids.append(relative_ids)
+
+    # Models and user defined Variables/Tensors would be transferred to the
+    # first device.
+    TVTs.append(TransferVarTensor(relative_ids[0]))
+    TMOs.append(TransferModulesOptims(relative_ids[0]))
+  return TVTs, TMOs, relative_device_ids
 
 
 def load_ckpt(modules_optims, ckpt_file, load_to_cpu=True, verbose=True):
@@ -338,76 +354,6 @@ def may_make_dir(path):
 
 def is_iterable(obj):
   return hasattr(obj, '__len__')
-
-
-def adjust_lr_staircase(param_groups=None, base_lrs=None,
-                        decay_epochs=None, epoch=None, ratios=0.1,
-                        verbose=False):
-  """Decay the learning rates in a staircase manner.
-  Args:
-    param_groups: typically returned by `some_optimizer.param_groups`
-    base_lrs: a scalar or a list    
-    decay_epochs: a scalar or a list
-    epoch: the current epoch number
-    ratios: a scalar or a list
-  Returns:
-    lrs: the learning rates after adjusting
-  """
-  if not is_iterable(base_lrs):
-    base_lrs = [base_lrs for _ in param_groups]
-  if not is_iterable(decay_epochs):
-    decay_epochs = [decay_epochs for _ in param_groups]
-  if not is_iterable(ratios):
-    ratios = [ratios for _ in param_groups]
-  lrs = []
-  log = 'lr adjusted to '
-  for param_group, base_lr, decay_epoch, ratio in \
-      zip(param_groups, base_lrs, decay_epochs, ratios):
-    lr = base_lr * (ratio ** (epoch // decay_epoch))
-    param_group['lr'] = lr
-    lrs.append(lr)
-    log += '{:.10f}'.format(param_group['lr']).rstrip('0').rstrip('.') + ', '
-  if verbose:
-    print(log)
-  return lrs
-
-
-def adjust_lr_poly(param_groups=None, base_lrs=None, total_epochs=None,
-                   epoch=None, pows=0.5, verbose=False):
-  """Decay the learning rates using a polynomial curve.
-  Args:
-    param_groups: typically returned by `some_optimizer.param_groups`
-    base_lrs: a scalar or a list
-    total_epochs: a scalar
-    epoch: the current epoch number
-    pows: a scalar or a list
-  Returns:
-    lrs: the learning rates after adjusting
-  """
-  if not is_iterable(base_lrs):
-    base_lrs = [base_lrs for _ in param_groups]
-  if not is_iterable(pows):
-    pows = [pows for _ in param_groups]
-  lrs = []
-  log = 'lr adjusted to '
-  for param_group, base_lr, pow in zip(param_groups, base_lrs, pows):
-    lr = base_lr * np.power(float(total_epochs - epoch) / total_epochs, pow)
-    param_group['lr'] = lr
-    lrs.append(lr)
-    log += '{:.10f}'.format(param_group['lr']).rstrip('0').rstrip('.') + ', '
-  if verbose:
-    print(log)
-  return lrs
-
-
-def adjust_lr(type='staircase', *args, **kwargs):
-  assert type in ['staircase', 'poly']
-  if type == 'staircase':
-    adjust_lr_staircase(*args, **kwargs)
-  elif type == 'poly':
-    adjust_lr_poly(*args, **kwargs)
-  else:
-    raise NotImplementedError
 
 
 def make_sure_str_list(may_be_list):

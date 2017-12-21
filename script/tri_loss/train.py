@@ -5,6 +5,7 @@ from torch.autograd import Variable
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+from torch.nn.parallel import DataParallel
 
 import time
 import shutil
@@ -32,17 +33,19 @@ from aligned_reid.utils.utils import print_array
 from aligned_reid.utils.utils import find_index
 
 
-def adjust_lr_exp(optimizer, base_lr, ep, total_ep, tran_ep):
-  if ep > tran_ep:
+def adjust_lr_exp(optimizer, base_lr, ep, total_ep, start_decay_at_ep):
+  """Decay exponentially after some epochs."""
+  if ep > start_decay_at_ep:
     for g in optimizer.param_groups:
-      g['lr'] = (base_lr *
-                 (0.001 ** (float(ep - tran_ep) / (total_ep - tran_ep))))
+      g['lr'] = (base_lr * (0.001 ** (float(ep - start_decay_at_ep)
+                                      / (total_ep - start_decay_at_ep))))
     print('=====> lr adjusted to {:.10f}'.format(g['lr']).rstrip('0'))
 
 
-def adjust_lr_staircase(optimizer, base_lr, ep, decay_epochs, factor):
-  if ep in decay_epochs:
-    ind = find_index(decay_epochs, ep)
+def adjust_lr_staircase(optimizer, base_lr, ep, decay_at_epochs, factor):
+  """Multiplied by a factor at specified epochs."""
+  if ep in decay_at_epochs:
+    ind = find_index(decay_at_epochs, ep)
     for g in optimizer.param_groups:
       g['lr'] = base_lr * factor ** (ind + 1)
     print('=====> lr adjusted to {:.10f}'.format(g['lr']).rstrip('0'))
@@ -84,7 +87,7 @@ def main():
   # Lazily create SummaryWriter
   writer = None
 
-  TVTs, TMOs = set_devices_for_ml(cfg.sys_device_ids)
+  TVTs, TMOs, relative_device_ids = set_devices_for_ml(cfg.sys_device_ids)
 
   if cfg.seed is not None:
     set_seed(cfg.seed)
@@ -103,6 +106,9 @@ def main():
   models = [Model(local_conv_out_channels=cfg.local_conv_out_channels,
                   num_classes=cfg.num_classes)
             for _ in range(cfg.num_models)]
+  # Model wrappers
+  model_ws = [DataParallel(models[i], device_ids=relative_device_ids[i])
+              for i in range(cfg.num_models)]
 
   #############################
   # Criteria and Optimizers   #
@@ -148,8 +154,8 @@ def main():
     if load_from_ckpt:
       load_ckpt(modules_optims, cfg.ckpt_file)
 
-    for i in range(len(models)):
-      test_set.set_feat_func(ExtractFeature(models[i], TVTs[i]))
+    for i in range(cfg.num_models):
+      test_set.set_feat_func(ExtractFeature(model_ws[i], TVTs[i]))
 
       print('=====> Test Model {}'.format(i + 1))
       use_local_distance = (cfg.l_loss_weight > 0) \
@@ -205,7 +211,7 @@ def main():
       ######################################
 
       TVT = TVTs[i]
-      model = models[i]
+      model_w = model_ws[i]
       ims = ims_list[i]
       labels = labels_list[i]
       optimizer = optimizers[i]
@@ -214,7 +220,7 @@ def main():
       labels_t = TVT(torch.from_numpy(labels).long())
       labels_var = Variable(labels_t)
 
-      global_feat, local_feat, logits = model(ims_var)
+      global_feat, local_feat, logits = model_w(ims_var)
       probs = F.softmax(logits)
       log_probs = F.log_softmax(logits)
 
@@ -356,7 +362,6 @@ def main():
       run_event2.clear()
 
       done_list2[i] = True
-
 
   threads = []
   for i in range(cfg.num_models):
@@ -545,9 +550,9 @@ def main():
     total_loss_log = ', loss {:.4f}'.format(loss_meter.avg)
 
     log = time_log + \
-              g_log + l_log + id_log + \
-              pm_log + gdm_log + ldm_log + \
-              total_loss_log
+          g_log + l_log + id_log + \
+          pm_log + gdm_log + ldm_log + \
+          total_loss_log
     print(log)
 
     # Log to TensorBoard

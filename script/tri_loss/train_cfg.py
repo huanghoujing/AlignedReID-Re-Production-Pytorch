@@ -12,8 +12,7 @@ class Config(object):
   def __init__(self):
 
     parser = argparse.ArgumentParser()
-    # One device for one model in the case of mutual learning.
-    parser.add_argument('-d', '--sys_device_ids', type=str, default='(0,)')
+    parser.add_argument('-d', '--sys_device_ids', type=eval, default=((0,),))
     parser.add_argument('--num_models', type=int, default=1)
     parser.add_argument('-r', '--run', type=int, default=1)
     parser.add_argument('--set_seed', type=str2bool, default=False)
@@ -56,7 +55,7 @@ class Config(object):
     args = parser.parse_known_args()[0]
 
     # gpu ids
-    self.sys_device_ids = eval(args.sys_device_ids)
+    self.sys_device_ids = args.sys_device_ids
 
     if args.set_seed:
       self.seed = 1
