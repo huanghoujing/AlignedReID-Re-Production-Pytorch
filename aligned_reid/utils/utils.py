@@ -711,3 +711,70 @@ def find_index(seq, item):
     if item == x:
       return i
   return -1
+
+
+def adjust_lr_exp(optimizer, base_lr, ep, total_ep, start_decay_at_ep):
+  """Decay exponentially in the later phase of training. All parameters in the 
+  optimizer share the same learning rate.
+  
+  Args:
+    optimizer: a pytorch `Optimizer` object
+    base_lr: starting learning rate
+    ep: current epoch, ep >= 1
+    total_ep: total number of epochs to train
+    start_decay_at_ep: start decaying at the BEGINNING of this epoch
+  
+  Example:
+    base_lr = 2e-4
+    total_ep = 300
+    start_decay_at_ep = 201
+    It means the learning rate starts at 2e-4 and begins decaying after 200 
+    epochs. And training stops after 300 epochs.
+  
+  NOTE: 
+    It is meant to be called at the BEGINNING of an epoch.
+  """
+  assert ep >= 1, "Current epoch number should be >= 1"
+
+  if ep < start_decay_at_ep:
+    return
+
+  for g in optimizer.param_groups:
+    g['lr'] = (base_lr * (0.001 ** (float(ep + 1 - start_decay_at_ep)
+                                    / (total_ep + 1 - start_decay_at_ep))))
+  print('=====> lr adjusted to {:.10f}'.format(g['lr']).rstrip('0'))
+
+
+def adjust_lr_staircase(optimizer, base_lr, ep, decay_at_epochs, factor):
+  """Multiplied by a factor at the BEGINNING of specified epochs. All 
+  parameters in the optimizer share the same learning rate.
+  
+  Args:
+    optimizer: a pytorch `Optimizer` object
+    base_lr: starting learning rate
+    ep: current epoch, ep >= 1
+    decay_at_epochs: a list or tuple; learning rate is multiplied by a factor 
+      at the BEGINNING of these epochs
+    factor: a number in range (0, 1)
+  
+  Example:
+    base_lr = 1e-3
+    decay_at_epochs = [51, 101]
+    factor = 0.1
+    It means the learning rate starts at 1e-3 and is multiplied by 0.1 at the 
+    BEGINNING of the 51'st epoch, and then further multiplied by 0.1 at the 
+    BEGINNING of the 101'st epoch, then stays unchanged till the end of 
+    training.
+  
+  NOTE: 
+    It is meant to be called at the BEGINNING of an epoch.
+  """
+  assert ep >= 1, "Current epoch number should be >= 1"
+
+  if ep not in decay_at_epochs:
+    return
+
+  ind = find_index(decay_at_epochs, ep)
+  for g in optimizer.param_groups:
+    g['lr'] = base_lr * factor ** (ind + 1)
+  print('=====> lr adjusted to {:.10f}'.format(g['lr']).rstrip('0'))

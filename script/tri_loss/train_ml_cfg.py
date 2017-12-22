@@ -12,7 +12,8 @@ class Config(object):
   def __init__(self):
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-d', '--sys_device_ids', type=eval, default=(0,))
+    parser.add_argument('-d', '--sys_device_ids', type=eval, default=((0,),))
+    parser.add_argument('--num_models', type=int, default=1)
     parser.add_argument('-r', '--run', type=int, default=1)
     parser.add_argument('--set_seed', type=str2bool, default=False)
     parser.add_argument('--dataset', type=str, default='market1501',
@@ -33,6 +34,9 @@ class Config(object):
     parser.add_argument('-glw', '--g_loss_weight', type=float, default=1.)
     parser.add_argument('-llw', '--l_loss_weight', type=float, default=0.)
     parser.add_argument('-idlw', '--id_loss_weight', type=float, default=0.)
+    parser.add_argument('-pmlw', '--pm_loss_weight', type=float, default=1.)
+    parser.add_argument('-gdmlw', '--gdm_loss_weight', type=float, default=1.)
+    parser.add_argument('-ldmlw', '--ldm_loss_weight', type=float, default=0.)
 
     parser.add_argument('--only_test', type=str2bool, default=False)
     parser.add_argument('--resume', type=str2bool, default=False)
@@ -174,6 +178,29 @@ class Config(object):
     # local loss weight
     self.l_loss_weight = args.l_loss_weight
 
+    ###############
+    # Mutual Loss #
+    ###############
+
+    # probability mutual loss weight
+    self.pm_loss_weight = args.pm_loss_weight
+    # global distance mutual loss weight
+    self.gdm_loss_weight = args.gdm_loss_weight
+    # local distance mutual loss weight
+    self.ldm_loss_weight = args.ldm_loss_weight
+
+    self.num_models = args.num_models
+    # See method `set_devices_for_ml` in `aligned_reid/utils/utils.py` for
+    # details.
+    assert len(self.sys_device_ids) == self.num_models, \
+      'You should specify device for each model.'
+
+    # Currently one model occupying multiple GPUs is not allowed.
+    if self.num_models > 1:
+      for ids in self.sys_device_ids:
+        assert len(ids) == 1, "When num_models > 1, one model occupying " \
+                              "multiple GPUs is not allowed."
+
     #############
     # Training  #
     #############
@@ -218,6 +245,9 @@ class Config(object):
         'glw_{}_'.format(tfs(self.g_loss_weight)) +
         'llw_{}_'.format(tfs(self.l_loss_weight)) +
         'idlw_{}_'.format(tfs(self.id_loss_weight)) +
+        'pmlw_{}_'.format(tfs(self.pm_loss_weight)) +
+        'gdmlw_{}_'.format(tfs(self.gdm_loss_weight)) +
+        'ldmlw_{}_'.format(tfs(self.ldm_loss_weight)) +
         'lr_{}_'.format(tfs(self.base_lr)) +
         '{}_'.format(self.lr_decay_type) +
         ('decay_at_{}_'.format(self.exp_decay_at_epoch)

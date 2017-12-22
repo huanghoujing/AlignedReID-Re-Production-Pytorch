@@ -189,6 +189,8 @@ def global_loss(tri_loss, global_feat, labels, normalize_feature=True):
     tri_loss: a `TripletLoss` object
     global_feat: pytorch Variable, shape [N, C]
     labels: pytorch LongTensor, with shape [N]
+    normalize_feature: whether to normalize feature to unit length along the 
+      Channel dimension
   Returns:
     loss: pytorch Variable, with shape [1]
     p_inds: pytorch LongTensor, with shape [N]; 
@@ -231,6 +233,8 @@ def local_loss(
     n_inds: pytorch LongTensor, with shape [N];
       indices of selected hard negative samples; 0 <= n_inds[i] <= N - 1
     labels: pytorch LongTensor, with shape [N]
+    normalize_feature: whether to normalize feature to unit length along the 
+      Channel dimension
   
   If hard samples are specified by `p_inds` and `n_inds`, then `labels` is not 
   used. Otherwise, local distance finds its own hard samples independent of 
@@ -253,10 +257,10 @@ def local_loss(
   if p_inds is None or n_inds is None:
     dist_mat = local_dist(local_feat, local_feat)
     dist_ap, dist_an = hard_example_mining(dist_mat, labels, return_inds=False)
+    loss = tri_loss(dist_ap, dist_an)
+    return loss, dist_ap, dist_an, dist_mat
   else:
     dist_ap = batch_local_dist(local_feat, local_feat[p_inds])
     dist_an = batch_local_dist(local_feat, local_feat[n_inds])
-  loss = tri_loss(dist_ap, dist_an)
-  if p_inds is None or n_inds is None:
-    return loss, dist_ap, dist_an, dist_mat
-  return loss, dist_ap, dist_an
+    loss = tri_loss(dist_ap, dist_an)
+    return loss, dist_ap, dist_an
