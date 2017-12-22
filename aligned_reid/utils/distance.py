@@ -125,3 +125,50 @@ def local_dist(x, y):
     return parallel_local_dist(x, y)
   else:
     raise NotImplementedError('Input shape not supported.')
+
+
+def low_memory_matrix_op(
+    x, y, func, split_x_or_y, axis, num_splits, verbose=False):
+  """
+  For matrix operation like multiplication, in order not to flood the memory 
+  with huge matrix, split one of the matrix into smaller parts (Divide and 
+  Conquer). Even if memory may be enough to store the large matrix, frequently 
+  allocating and freeing large memory (e.g. dozens of GB) alone takes MUCH time. 
+  If still out of memory, increase `num_splits`.
+  
+  Args:
+    x: numpy array, the dimension to split has length M
+    y: numpy array, the dimension to split has length N
+    func: a matrix function func(x, y) -> z with shape [M, N]    
+    split_x_or_y: 'x' or 'y'
+    axis: The axis to split x or y
+    num_splits: number of splits. 
+      For splitting x, 1 <= num_splits <= M
+      For splitting y, 1 <= num_splits <= N
+    verbose: whether to print the progress
+    
+  Returns:
+    mat: numpy array, shape [M, N]
+  """
+  if verbose:
+    import sys
+    import time
+    last_time = time.time()
+
+  mat = []
+  to_split = x if split_x_or_y == 'x' else y
+  for i, part in enumerate(np.array_split(to_split, num_splits, axis=axis)):
+    part_mat = func(part, y) if split_x_or_y == 'x' else func(x, part)
+    mat.append(part_mat)
+
+    if verbose:
+      if i > 0:
+        # Clean the current line
+        sys.stdout.write("\033[F\033[K")
+      print('Matrix part {}/{}, +{:.2f}s'
+            .format(i + 1, num_splits, time.time() - last_time))
+      last_time = time.time()
+
+  axis_to_concat = 0 if split_x_or_y == 'x' else 1
+  mat = np.concatenate(mat, axis=axis_to_concat)
+  return mat

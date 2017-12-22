@@ -1,16 +1,20 @@
 from __future__ import print_function
-from .Dataset import Dataset
-from aligned_reid.utils.ranking import cmc, mean_ap
-from aligned_reid.utils.dataset_utils import parse_im_name
-from aligned_reid.utils.distance import normalize
-from aligned_reid.utils.distance import compute_dist
-from aligned_reid.utils.distance import local_dist
-
+import sys
 import time
 import os.path as osp
 import matplotlib.pyplot as plt
 import numpy as np
 from collections import defaultdict
+
+from .Dataset import Dataset
+
+from aligned_reid.utils.re_ranking import re_ranking
+from aligned_reid.utils.metric import cmc, mean_ap
+from aligned_reid.utils.dataset_utils import parse_im_name
+from aligned_reid.utils.distance import normalize
+from aligned_reid.utils.distance import compute_dist
+from aligned_reid.utils.distance import local_dist
+from aligned_reid.utils.distance import low_memory_matrix_op
 
 
 class TestSet(Dataset):
@@ -24,16 +28,19 @@ class TestSet(Dataset):
       multi query (e == 2) set
   """
 
-  def __init__(self,
-               im_dir=None,
-               im_names=None,
-               marks=None,
-               extract_feat_func=None,
-               separate_camera_set=None,
-               single_gallery_shot=None,
-               first_match_break=None,
-               **kwargs):
+  def __init__(
+      self,
+      im_dir=None,
+      im_names=None,
+      marks=None,
+      extract_feat_func=None,
+      separate_camera_set=None,
+      single_gallery_shot=None,
+      first_match_break=None,
+      **kwargs):
+
     super(TestSet, self).__init__(dataset_size=len(im_names), **kwargs)
+
     # The im dir of all images
     self.im_dir = im_dir
     self.im_names = im_names
@@ -87,6 +94,7 @@ class TestSet(Dataset):
       [], [], [], [], [], []
     done = False
     step = 0
+    printed = False
     last_time = time.time()
     while not done:
       ims_, ids_, cams_, im_names_, marks_, done = self.next_batch()
@@ -102,8 +110,13 @@ class TestSet(Dataset):
       total_batches = (self.prefetcher.dataset_size
                        // self.prefetcher.batch_size + 1)
       step += 1
-      if step % 50 == 0:
-        print('\t{}/{} batches done, +{:.2f}s'
+      if step % 20 == 0:
+        if not printed:
+          printed = True
+        else:
+          # Clean the current line
+          sys.stdout.write("\033[F\033[K")
+        print('{}/{} batches done, +{:.2f}s'
               .format(step, total_batches, time.time() - last_time))
         last_time = time.time()
 
@@ -159,11 +172,13 @@ class TestSet(Dataset):
       self,
       normalize_feat=True,
       use_local_distance=False,
+      to_re_rank=True,
       pool_type='average'):
     """Evaluate using metric CMC and mAP.
     Args:
       normalize_feat: whether to normalize features before computing distance
       use_local_distance: whether to use local distance
+      to_re_rank: whether to also report re-ranking scores
       pool_type: 'average' or 'max', only for multi-query case
     """
     st = time.time()
@@ -172,6 +187,7 @@ class TestSet(Dataset):
       self.extract_feat(normalize_feat)
     print('Done, {:.2f}s'.format(time.time() - st))
 
+    # query, gallery, multi-query indices
     q_inds = marks == 0
     g_inds = marks == 1
     mq_inds = marks == 2
@@ -182,6 +198,7 @@ class TestSet(Dataset):
 
     st = time.time()
     print('Computing global distance...')
+    # query-gallery distance using global distance
     global_q_g_dist = compute_dist(
       global_feats[q_inds], global_feats[g_inds], type='euclidean')
     print('Done, {:.2f}s'.format(time.time() - st))
@@ -192,68 +209,113 @@ class TestSet(Dataset):
 
     if use_local_distance:
       st = time.time()
-      last_time = time.time()
       print('Computing local distance...')
       q_local_feats = local_feats[q_inds]
       g_local_feats = local_feats[g_inds]
-      # In order not to flood the memory with huge data,
-      # split the gallery set into smaller parts (Divide and Conquer).
-      # Even if memory may be enough to store the large matrix, frequently
-      # allocating and freeing large memory (e.g. dozens of GB) alone takes
-      # MUCH time.
-      # If out of memory, increase `num_splits`.
+
+      # query-gallery distance using local distance
       num_splits = int(len(g_local_feats) / 50) + 1
-      local_q_g_dist = []
-      for i, glf in enumerate(np.array_split(g_local_feats, num_splits)):
-        local_q_g_dist.append(local_dist(q_local_feats, glf))
-        print('\tsplit {}/{}, +{:.2f}s'
-              .format(i + 1, num_splits, time.time() - last_time))
-        last_time = time.time()
-      local_q_g_dist = np.concatenate(local_q_g_dist, axis=1)
+      local_q_g_dist = low_memory_matrix_op(
+        q_local_feats, g_local_feats, local_dist, 'y', 0, num_splits,
+        verbose=True)
+
       print('Done, {:.2f}s'.format(time.time() - st))
 
-    ##################
-    # Compute Scores #
-    ##################
+    # A helper function just for avoiding code duplication.
+    def compute_score(dist_mat, dist_type):
+      st = time.time()
+      print('Computing scores for {}...'.format(dist_type))
+      mAP, cmc_scores = self.eval_map_cmc(
+        q_g_dist=dist_mat,
+        q_ids=ids[q_inds], g_ids=ids[g_inds],
+        q_cams=cams[q_inds], g_cams=cams[g_inds],
+        separate_camera_set=self.separate_camera_set,
+        single_gallery_shot=self.single_gallery_shot,
+        first_match_break=self.first_match_break,
+        topk=10)
+      print('{} score done, {:.2f}s\n'
+            .format(dist_type, time.time() - st))
+      return mAP, cmc_scores
 
-    st = time.time()
-    print('Computing scores for Global Distance')
-    mAP, cmc_scores = self.eval_map_cmc(
-      q_g_dist=global_q_g_dist,
-      q_ids=ids[q_inds], g_ids=ids[g_inds],
-      q_cams=cams[q_inds], g_cams=cams[g_inds],
-      separate_camera_set=self.separate_camera_set,
-      single_gallery_shot=self.single_gallery_shot,
-      first_match_break=self.first_match_break,
-      topk=10)
-    print('Done, {:.2f}s'.format(time.time() - st))
+    ##################################
+    # Compute Global Distance Scores #
+    ##################################
 
+    mAP, cmc_scores = compute_score(global_q_g_dist, 'Global Distance')
+
+    if to_re_rank:
+      rr_st = time.time()
+      print('Re-ranking...')
+
+      # query-query distance using global distance
+      global_q_q_dist = compute_dist(
+        global_feats[q_inds], global_feats[q_inds], type='euclidean')
+      # gallery-gallery distance using global distance
+      global_g_g_dist = compute_dist(
+        global_feats[g_inds], global_feats[g_inds], type='euclidean')
+
+      # re-ranked global query-gallery distance
+      re_r_global_q_g_dist = re_ranking(
+        global_q_g_dist, global_q_q_dist, global_g_g_dist)
+      print('Re-ranking done, {:.2f}s'.format(time.time() - rr_st))
+
+      mAP, cmc_scores = compute_score(
+        re_r_global_q_g_dist, 're-ranked Global Distance')
+
+    ##################################
+    # Compute Local Distance Scores #
+    ##################################
 
     if use_local_distance:
+      mAP, cmc_scores = compute_score(local_q_g_dist, 'Local Distance')
 
-      st = time.time()
-      print('Computing scores for Local Distance')
-      mAP, cmc_scores = self.eval_map_cmc(
-        q_g_dist=local_q_g_dist,
-        q_ids=ids[q_inds], g_ids=ids[g_inds],
-        q_cams=cams[q_inds], g_cams=cams[g_inds],
-        separate_camera_set=self.separate_camera_set,
-        single_gallery_shot=self.single_gallery_shot,
-        first_match_break=self.first_match_break,
-        topk=10)
-      print('Done, {:.2f}s'.format(time.time() - st))
+      if to_re_rank:
+        rr_st = time.time()
+        print('Re-ranking...')
 
-      st = time.time()
-      print('Computing scores for Global+Local Distance')
-      mAP, cmc_scores = self.eval_map_cmc(
-        q_g_dist=global_q_g_dist + local_q_g_dist,
-        q_ids=ids[q_inds], g_ids=ids[g_inds],
-        q_cams=cams[q_inds], g_cams=cams[g_inds],
-        separate_camera_set=self.separate_camera_set,
-        single_gallery_shot=self.single_gallery_shot,
-        first_match_break=self.first_match_break,
-        topk=10)
-      print('Done, {:.2f}s'.format(time.time() - st))
+        num_splits = int(len(q_local_feats) / 50) + 1
+        # query-query distance using local distance
+        local_q_q_dist = low_memory_matrix_op(
+          q_local_feats, q_local_feats, local_dist, 'y', 0, num_splits,
+          verbose=True)
+
+        num_splits = int(len(g_local_feats) / 50) + 1
+        # gallery-gallery distance using local distance
+        local_g_g_dist = low_memory_matrix_op(
+          g_local_feats, g_local_feats, local_dist, 'y', 0, num_splits,
+          verbose=True)
+
+        re_r_local_q_g_dist = re_ranking(
+          local_q_g_dist, local_q_q_dist, local_g_g_dist)
+
+        print('Re-ranking done, {:.2f}s'.format(time.time() - rr_st))
+
+        mAP, cmc_scores = compute_score(
+          re_r_local_q_g_dist, 're-ranked Local Distance')
+
+      ########################################
+      # Compute Global+Local Distance Scores #
+      ########################################
+
+      global_local_q_g_dist = global_q_g_dist + local_q_g_dist
+      mAP, cmc_scores = compute_score(
+          global_local_q_g_dist, 'Global+Local Distance')
+
+      if to_re_rank:
+        rr_st = time.time()
+        print('Re-ranking...')
+
+        global_local_q_q_dist = global_q_q_dist + local_q_q_dist
+        global_local_g_g_dist = global_g_g_dist + local_g_g_dist
+
+        re_r_global_local_q_g_dist = re_ranking(
+          global_local_q_g_dist, global_local_q_q_dist, global_local_g_g_dist)
+
+        print('Re-ranking done, {:.2f}s'.format(time.time() - rr_st))
+
+        mAP, cmc_scores = compute_score(
+          re_r_global_local_q_g_dist, 're-ranked Global+Local Distance')
+
 
     # multi-query
     # TODO: allow local distance in Multi Query

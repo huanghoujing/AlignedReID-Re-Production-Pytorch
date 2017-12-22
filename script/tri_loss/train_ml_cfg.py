@@ -17,7 +17,7 @@ class Config(object):
     parser.add_argument('-r', '--run', type=int, default=1)
     parser.add_argument('--set_seed', type=str2bool, default=False)
     parser.add_argument('--dataset', type=str, default='market1501',
-                        choices=['market1501', 'cuhk03', 'duke'])
+                        choices=['market1501', 'cuhk03', 'duke', 'combined'])
     parser.add_argument('--trainset_part', type=str, default='trainval',
                         choices=['trainval', 'train'])
 
@@ -78,25 +78,7 @@ class Config(object):
       self.prefetch_threads = 2
 
     self.dataset = args.dataset
-
-    if self.dataset == 'market1501':
-      self.im_dir = osp.expanduser('~/Dataset/market1501/images')
-      self.partition_file = osp.expanduser(
-        '~/Dataset/market1501/partitions.pkl')
-    elif self.dataset == 'cuhk03':
-      self.im_type = ['detected', 'labeled'][0]
-      self.im_dir = osp.expanduser(
-        osp.join('~/Dataset/cuhk03', self.im_type, 'images'))
-      self.partition_file = osp.expanduser(
-        osp.join('~/Dataset/cuhk03', self.im_type, 'partitions.pkl'))
-    elif self.dataset == 'duke':
-      self.im_dir = osp.expanduser('~/Dataset/duke/images')
-      self.partition_file = osp.expanduser('~/Dataset/duke/partitions.pkl')
-
     self.trainset_part = args.trainset_part
-    # num of classes in reid net.
-    self.num_classes = \
-      len(load_pickle(self.partition_file)[self.trainset_part + '_ids2labels'])
 
     # Image Processing
 
@@ -123,8 +105,6 @@ class Config(object):
 
     dataset_kwargs = dict(
       name=self.dataset,
-      partition_file=self.partition_file,
-      im_dir=self.im_dir,
       resize_size=self.im_resize_size,
       crop_size=self.im_crop_size,
       scale=self.scale_im,

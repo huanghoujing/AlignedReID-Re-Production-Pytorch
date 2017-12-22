@@ -81,11 +81,28 @@ def main():
   print('-' * 60)
 
   ###########
+  # Dataset #
+  ###########
+
+  train_set = create_dataset(**cfg.train_set_kwargs)
+
+  test_sets = []
+  test_set_names = []
+  if cfg.dataset == 'combined':
+    for name in ['market1501', 'cuhk03', 'duke']:
+      cfg.test_set_kwargs['name'] = name
+      test_sets.append(create_dataset(**cfg.test_set_kwargs))
+      test_set_names.append(name)
+  else:
+    test_sets.append(create_dataset(**cfg.test_set_kwargs))
+    test_set_names.append(cfg.dataset)
+
+  ###########
   # Models  #
   ###########
 
   model = Model(local_conv_out_channels=cfg.local_conv_out_channels,
-                num_classes=cfg.num_classes)
+                num_classes=len(train_set.ids2labels))
   # Model wrapper
   model_w = DataParallel(model)
 
@@ -114,14 +131,6 @@ def main():
   # is to cope with the case when you load the checkpoint to a new device.
   TMO(modules_optims)
 
-  ###########
-  # Dataset #
-  ###########
-
-  if not cfg.only_test:
-    train_set = create_dataset(**cfg.train_set_kwargs)
-  test_set = create_dataset(**cfg.test_set_kwargs)
-
   ########
   # Test #
   ########
@@ -131,13 +140,15 @@ def main():
     if load_from_ckpt:
       load_ckpt(modules_optims, cfg.ckpt_file)
 
-    test_set.set_feat_func(ExtractFeature(model_w, TVT))
-
     use_local_distance = (cfg.l_loss_weight > 0) \
                          and cfg.local_dist_own_hard_sample
-    test_set.eval(
-      normalize_feat=cfg.normalize_feature,
-      use_local_distance=use_local_distance)
+
+    for test_set, name in zip(test_sets, test_set_names):
+      test_set.set_feat_func(ExtractFeature(model_w, TVT))
+      print('\n=========> Test on dataset: {} <=========\n'.format(name))
+      test_set.eval(
+        normalize_feat=cfg.normalize_feature,
+        use_local_distance=use_local_distance)
 
   if cfg.only_test:
     test(load_from_ckpt=True)
@@ -271,7 +282,7 @@ def main():
         if cfg.g_loss_weight > 0:
           g_log = (', gp {:.4f}, gm {:.4f}, '
                    'gd_ap {:.4f}, gd_an {:.4f}, '
-                   'g_loss {:.4f}'.format(
+                   'gL{:.4f}'.format(
             g_prec_meter.val, g_m_meter.val,
             g_dist_ap_meter.val, g_dist_an_meter.val,
             g_loss_meter.val, ))
@@ -281,7 +292,7 @@ def main():
         if cfg.l_loss_weight > 0:
           l_log = (', lp {:.4f}, lm {:.4f}, '
                    'ld_ap {:.4f}, ld_an {:.4f}, '
-                   'l_loss {:.4f}'.format(
+                   'lL{:.4f}'.format(
             l_prec_meter.val, l_m_meter.val,
             l_dist_ap_meter.val, l_dist_an_meter.val,
             l_loss_meter.val, ))
@@ -289,7 +300,7 @@ def main():
           l_log = ''
 
         if cfg.id_loss_weight > 0:
-          id_log = (', id_loss {:.4f}'.format(id_loss_meter.val))
+          id_log = (', idL{:.4f}'.format(id_loss_meter.val))
         else:
           id_log = ''
 
@@ -309,7 +320,7 @@ def main():
     if cfg.g_loss_weight > 0:
       g_log = (', gp {:.4f}, gm {:.4f}, '
                'gd_ap {:.4f}, gd_an {:.4f}, '
-               'g_loss {:.4f}'.format(
+               'gL{:.4f}'.format(
         g_prec_meter.avg, g_m_meter.avg,
         g_dist_ap_meter.avg, g_dist_an_meter.avg,
         g_loss_meter.avg, ))
@@ -319,7 +330,7 @@ def main():
     if cfg.l_loss_weight > 0:
       l_log = (', lp {:.4f}, lm {:.4f}, '
                'ld_ap {:.4f}, ld_an {:.4f}, '
-               'l_loss {:.4f}'.format(
+               'lL{:.4f}'.format(
         l_prec_meter.avg, l_m_meter.avg,
         l_dist_ap_meter.avg, l_dist_an_meter.avg,
         l_loss_meter.avg, ))
@@ -327,7 +338,7 @@ def main():
       l_log = ''
 
     if cfg.id_loss_weight > 0:
-      id_log = (', id_loss {:.4f}'.format(id_loss_meter.avg))
+      id_log = (', idL{:.4f}'.format(id_loss_meter.avg))
     else:
       id_log = ''
 

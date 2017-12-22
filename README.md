@@ -18,9 +18,9 @@ If you adopt AlignedReID in your research, please cite the paper
   - [x] Triplet Global Loss
   - [x] Triplet Local Loss
   - [x] Identification Loss
-  - [ ] Mutual Loss
+  - [x] Mutual Loss
 - Testing
-  - [ ] Re-Ranking
+  - [x] Re-Ranking
 - Speed
   - [x] Speed up forward & backward
   - [ ] Speed up local distance at test time. (Replace numpy by pytorch cuda operation.)
@@ -166,24 +166,88 @@ python script/dataset/transform_duke.py \
 --save_dir ~/Dataset/duke
 ```
 
+
+## Combining Trainval Set of Market1501, CUHK03, DukeMTMC-reID
+
+Larger training set tends to benefit deep learning models, so I combine trainval set of three datasets Market1501, CUHK03 and DukeMTMC-reID. After training on the combined trainval set, the model can be tested on three test sets as usual.
+
+Transform the test sets as introduced above if you have not done it.
+
+For the trainval set, you can download what I have transformed from [Google Drive](https://drive.google.com/open?id=1hmZIRkaLvLb_lA1CcC4uGxmA4ppxPinj) or [BaiduYun](https://pan.baidu.com/s/1jIvNYPg). Otherwise, you can run the following script to combine the trainval sets, replacing the paths with yours.
+
+```bash
+python script/dataset/combine_trainval_sets.py \
+--market1501_im_dir ~/Dataset/market1501/images \
+--market1501_partition_file ~/Dataset/market1501/partitions.pkl \
+--cuhk03_im_dir ~/Dataset/cuhk03/detected/images \
+--cuhk03_partition_file ~/Dataset/cuhk03/detected/partitions.pkl \
+--duke_im_dir ~/Dataset/duke/images \
+--duke_partition_file ~/Dataset/duke/partitions.pkl \
+--save_dir ~/Dataset/market1501_cuhk03_duke
+```
+
 ## Configure Dataset Path in Training Script
 
-The training code requires you to configure the dataset paths. In `script/tri_loss/train_cfg.py`, modify the following snippet according to your saving paths used in preparing datasets.
+The training code requires you to configure the dataset paths. In `aligned_reid/tri_loss/dataset/__init__.py`, modify the following snippet according to your saving paths used in preparing datasets.
 
 ```python
-# In file script/tri_loss/train_cfg.py
+# In file aligned_reid/tri_loss/dataset/__init__.py
 
-if self.dataset == 'market1501':
-  self.im_dir = osp.expanduser('~/Dataset/market1501/images')
-  self.partition_file = osp.expanduser('~/Dataset/market1501/partitions.pkl')
-elif self.dataset == 'cuhk03':
-  self.im_type = ['detected', 'labeled'][0]
-  self.im_dir = osp.expanduser(osp.join('~/Dataset/cuhk03', self.im_type, 'images'))
-  self.partition_file = osp.expanduser(osp.join('~/Dataset/cuhk03', self.im_type, 'partitions.pkl'))
-elif self.dataset == 'duke':
-  self.im_dir = osp.expanduser('~/Dataset/duke/images')
-  self.partition_file = osp.expanduser('~/Dataset/duke/partitions.pkl')
+########################################
+# Specify Directory and Partition File #
+########################################
+
+if name == 'market1501':
+  im_dir = ospeu('~/Dataset/market1501/images')
+  partition_file = ospeu('~/Dataset/market1501/partitions.pkl')
+
+elif name == 'cuhk03':
+  im_type = ['detected', 'labeled'][0]
+  im_dir = ospeu(ospj('~/Dataset/cuhk03', im_type, 'images'))
+  partition_file = ospeu(ospj('~/Dataset/cuhk03', im_type, 'partitions.pkl'))
+
+elif name == 'duke':
+  im_dir = ospeu('~/Dataset/duke/images')
+  partition_file = ospeu('~/Dataset/duke/partitions.pkl')
+
+elif name == 'combined':
+  assert part in ['trainval'], \
+    "Only trainval part of the combined dataset is available now."
+  im_dir = ospeu('~/Dataset/market1501_cuhk03_duke/trainval_images')
+  partition_file = ospeu('~/Dataset/market1501_cuhk03_duke/partitions.pkl')
 ```
+
+
+## Evaluation Protocol
+
+Datasets used in this project all follow the standard evaluation protocol of Market1501, using CMC and mAP metric. According to [open-reid](https://github.com/Cysu/open-reid), the setting of CMC is as follows
+
+```python
+# In file aligned_reid/tri_loss/dataset/__init__.py
+
+cmc_kwargs = dict(separate_camera_set=False,
+                  single_gallery_shot=False,
+                  first_match_break=True)
+```
+
+To play with [different CMC options](https://cysu.github.io/open-reid/notes/evaluation_metrics.html), you can [modify it accordingly](https://github.com/Cysu/open-reid/blob/3293ca79a07ebee7f995ce647aafa7df755207b8/reid/evaluators.py#L85-L95).
+
+```python
+# In open-reid's reid/evaluators.py
+
+# Compute all kinds of CMC scores
+cmc_configs = {
+  'allshots': dict(separate_camera_set=False,
+                   single_gallery_shot=False,
+                   first_match_break=False),
+  'cuhk03': dict(separate_camera_set=True,
+                 single_gallery_shot=True,
+                 first_match_break=False),
+  'market1501': dict(separate_camera_set=False,
+                     single_gallery_shot=False,
+                     first_match_break=True)}
+```
+
 
 # Training Examples
 
@@ -192,42 +256,20 @@ elif self.dataset == 'duke':
 To train and test `ResNet-50 + Global Loss` on Market1501:
 
 ```bash
-python script/tri_loss/train.py \
--d '(0,)' \
---dataset market1501 \
---normalize_feature false \
---local_dist_own_hard_sample true \
--gm 0.3 \
--lm 0.3 \
--glw 1 \
--llw 0 \
--idlw 0 \
--gtw 1 \
--ltw 0
+
 ```
 
 To train `ResNet-50 + Global Loss + Local Loss` on Market1501, and test with `Global + Local Distance`:
 
 ```bash
-python script/tri_loss/train.py \
--d '(0,)' \
---dataset market1501 \
---normalize_feature false \
---local_dist_own_hard_sample true \
--gm 0.3 \
--lm 0.3 \
--glw 1 \
--llw 1 \
--idlw 0 \
--gtw 1 \
--ltw 1
+
 ```
 
 You can run the [TensorBoard](https://github.com/lanpa/tensorboard-pytorch) to watch the loss curves etc during training. E.g.
 
 ```bash
 # Modify the path for `--logdir` accordingly.
-tensorboard --logdir exp/tri_loss/market1501/train/not_nf_ohs_gm_0.3_lm_0.3_glw_1_llw_1_idlw_0_gtw_1_ltw_1/run1/tensorboard
+tensorboard --logdir your_exp_dir/tensorboard
 ```
 
 For more usage of TensorBoard, see the website and the help:

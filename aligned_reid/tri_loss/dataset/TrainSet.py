@@ -12,8 +12,16 @@ class TrainSet(Dataset):
   Args:
     ids2labels: a dict mapping ids to labels
   """
-  def __init__(self, im_dir=None, im_names=None, ids2labels=None,
-               ids_per_batch=None, ims_per_id=None, **kwargs):
+
+  def __init__(
+      self,
+      im_dir=None,
+      im_names=None,
+      ids2labels=None,
+      ids_per_batch=None,
+      ims_per_id=None,
+      **kwargs):
+
     # The im dir of all images
     self.im_dir = im_dir
     self.im_names = im_names
@@ -26,6 +34,7 @@ class TrainSet(Dataset):
     for ind, id in enumerate(im_ids):
       self.ids_to_im_inds[id].append(ind)
     self.ids = self.ids_to_im_inds.keys()
+
     super(TrainSet, self).__init__(
       dataset_size=len(self.ids),
       batch_size=ids_per_batch,

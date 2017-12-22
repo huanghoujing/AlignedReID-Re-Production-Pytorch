@@ -9,20 +9,40 @@ class Dataset(object):
     final_batch: bool. The last batch may not be complete, if to abandon this 
       batch, set 'final_batch' to False.
   """
-  def __init__(self, dataset_size=None,
-               batch_size=None, final_batch=True, shuffle=True,
-               resize_size=None, crop_size=None,
-               scale=True, im_mean=None, im_std=None,
-               mirror_type=None,
-               batch_dims='NCHW', num_prefetch_threads=1, prng=np.random):
+
+  def __init__(
+      self,
+      dataset_size=None,
+      batch_size=None,
+      final_batch=True,
+      shuffle=True,
+      resize_size=None,
+      crop_size=None,
+      scale=True,
+      im_mean=None,
+      im_std=None,
+      mirror_type=None,
+      batch_dims='NCHW',
+      num_prefetch_threads=1,
+      prng=np.random):
+
     self.pre_process_im = PreProcessIm(
-      resize_size=resize_size, crop_size=crop_size,
-      scale=scale, im_mean=im_mean, im_std=im_std,
-      mirror_type=mirror_type, batch_dims=batch_dims,
+      resize_size=resize_size,
+      crop_size=crop_size,
+      scale=scale,
+      im_mean=im_mean,
+      im_std=im_std,
+      mirror_type=mirror_type,
+      batch_dims=batch_dims,
       prng=prng)
+
     self.prefetcher = Prefetcher(
-      self.get_sample, dataset_size, batch_size,
-      final_batch=final_batch, num_threads=num_prefetch_threads)
+      self.get_sample,
+      dataset_size,
+      batch_size,
+      final_batch=final_batch,
+      num_threads=num_prefetch_threads)
+
     self.shuffle = shuffle
     self.epoch_done = True
     self.prng = prng
