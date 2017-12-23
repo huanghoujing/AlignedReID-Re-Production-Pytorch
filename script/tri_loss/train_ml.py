@@ -445,7 +445,7 @@ def main():
           step, ep + 1, time.time() - step_st, )
 
         if cfg.g_loss_weight > 0:
-          g_log = (', gp {:.4f}, gm {:.4f}, '
+          g_log = (', gp {:.2%}, gm {:.2%}, '
                    'gd_ap {:.4f}, gd_an {:.4f}, '
                    'gL {:.4f}'.format(
             g_prec_meter.val, g_m_meter.val,
@@ -455,7 +455,7 @@ def main():
           g_log = ''
 
         if cfg.l_loss_weight > 0:
-          l_log = (', lp {:.4f}, lm {:.4f}, '
+          l_log = (', lp {:.2%}, lm {:.2%}, '
                    'ld_ap {:.4f}, ld_an {:.4f}, '
                    'lL {:.4f}'.format(
             l_prec_meter.val, l_m_meter.val,
@@ -501,7 +501,7 @@ def main():
     time_log = 'Ep {}, {:.2f}s'.format(ep + 1, time.time() - ep_st, )
 
     if cfg.g_loss_weight > 0:
-      g_log = (', gp {:.4f}, gm {:.4f}, '
+      g_log = (', gp {:.2%}, gm {:.2%}, '
                'gd_ap {:.4f}, gd_an {:.4f}, '
                'gL {:.4f}'.format(
         g_prec_meter.avg, g_m_meter.avg,
@@ -511,7 +511,7 @@ def main():
       g_log = ''
 
     if cfg.l_loss_weight > 0:
-      l_log = (', lp {:.4f}, lm {:.4f}, '
+      l_log = (', lp {:.2%}, lm {:.2%}, '
                'ld_ap {:.4f}, ld_an {:.4f}, '
                'lL {:.4f}'.format(
         l_prec_meter.avg, l_m_meter.avg,

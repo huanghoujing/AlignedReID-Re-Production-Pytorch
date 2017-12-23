@@ -61,7 +61,10 @@ def shortest_dist(dist_mat):
         dist[i, j] = \
           np.min(np.stack([dist[i - 1, j], dist[i, j - 1]], axis=0), axis=0) \
           + dist_mat[i, j]
-  dist = dist[-1, -1]
+  # I ran into memory disaster when returning this reference! I still don't
+  # know why.
+  # dist = dist[-1, -1]
+  dist = dist[-1, -1].copy()
   return dist
 
 
@@ -128,47 +131,57 @@ def local_dist(x, y):
 
 
 def low_memory_matrix_op(
-    x, y, func, split_x_or_y, axis, num_splits, verbose=False):
+    func,
+    x, y,
+    x_split_axis, y_split_axis,
+    x_num_splits, y_num_splits,
+    verbose=False):
   """
   For matrix operation like multiplication, in order not to flood the memory 
-  with huge matrix, split one of the matrix into smaller parts (Divide and 
-  Conquer). Even if memory may be enough to store the large matrix, frequently 
-  allocating and freeing large memory (e.g. dozens of GB) alone takes MUCH time. 
-  If still out of memory, increase `num_splits`.
+  with huge data, split matrices into smaller parts (Divide and Conquer). 
+  
+  Note: 
+    If still out of memory, increase `*_num_splits`.
   
   Args:
+    func: a matrix function func(x, y) -> z with shape [M, N]
     x: numpy array, the dimension to split has length M
     y: numpy array, the dimension to split has length N
-    func: a matrix function func(x, y) -> z with shape [M, N]    
-    split_x_or_y: 'x' or 'y'
-    axis: The axis to split x or y
-    num_splits: number of splits. 
-      For splitting x, 1 <= num_splits <= M
-      For splitting y, 1 <= num_splits <= N
+    x_split_axis: The axis to split x into parts
+    y_split_axis: The axis to split y into parts
+    x_num_splits: number of splits. 1 <= x_num_splits <= M
+    y_num_splits: number of splits. 1 <= y_num_splits <= N
     verbose: whether to print the progress
     
   Returns:
     mat: numpy array, shape [M, N]
   """
+
   if verbose:
     import sys
     import time
+    printed = False
+    st = time.time()
     last_time = time.time()
 
-  mat = []
-  to_split = x if split_x_or_y == 'x' else y
-  for i, part in enumerate(np.array_split(to_split, num_splits, axis=axis)):
-    part_mat = func(part, y) if split_x_or_y == 'x' else func(x, part)
-    mat.append(part_mat)
+  mat = [[] for _ in range(x_num_splits)]
+  for i, part_x in enumerate(
+      np.array_split(x, x_num_splits, axis=x_split_axis)):
+    for j, part_y in enumerate(
+        np.array_split(y, y_num_splits, axis=y_split_axis)):
+      part_mat = func(part_x, part_y)
+      mat[i].append(part_mat)
 
-    if verbose:
-      if i > 0:
-        # Clean the current line
-        sys.stdout.write("\033[F\033[K")
-      print('Matrix part {}/{}, +{:.2f}s'
-            .format(i + 1, num_splits, time.time() - last_time))
-      last_time = time.time()
-
-  axis_to_concat = 0 if split_x_or_y == 'x' else 1
-  mat = np.concatenate(mat, axis=axis_to_concat)
+      if verbose:
+        if not printed:
+          printed = True
+        else:
+          # Clean the current line
+          sys.stdout.write("\033[F\033[K")
+        print('Matrix part ({}, {}) / ({}, {}), +{:.2f}s, total {:.2f}s'
+              .format(i + 1, j + 1, x_num_splits, y_num_splits,
+                      time.time() - last_time, time.time() - st))
+        last_time = time.time()
+    mat[i] = np.concatenate(mat[i], axis=1)
+  mat = np.concatenate(mat, axis=0)
   return mat

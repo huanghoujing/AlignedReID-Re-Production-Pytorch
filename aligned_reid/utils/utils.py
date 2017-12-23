@@ -7,6 +7,8 @@ import gc
 import numpy as np
 from scipy import io
 import datetime
+import time
+from contextlib import contextmanager
 
 import torch
 from torch.autograd import Variable
@@ -778,3 +780,11 @@ def adjust_lr_staircase(optimizer, base_lr, ep, decay_at_epochs, factor):
   for g in optimizer.param_groups:
     g['lr'] = base_lr * factor ** (ind + 1)
   print('=====> lr adjusted to {:.10f}'.format(g['lr']).rstrip('0'))
+
+
+@contextmanager
+def measure_time(enter_msg):
+  st = time.time()
+  print(enter_msg)
+  yield
+  print('Done, {:.2f}s'.format(time.time() - st))
