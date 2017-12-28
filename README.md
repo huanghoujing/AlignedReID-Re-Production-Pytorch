@@ -33,19 +33,21 @@ On Market1501 with setting
 - Adam optimizer, base learning rate 2e-4, decaying exponentially after 150 epochs. Train for 300 epochs in total.
 
 |   | Rank-1 (%) | mAP (%) | Rank-1 (%) after Re-ranking | mAP (%) after Re-ranking |
-| --- | --- | --- | --- | --- |
+| --- | :---: | :---: | :---: | :---: |
 | Triplet Loss | 87.05 | 71.38 | 89.85 | 85.49 |
 | Triplet Loss + Mutual Loss | 88.78 | 75.76 | 91.92 | 88.27 |
 
-Other details of setting can be found in the code. To test my trained models or reproduce these results, see the [Examples](#Examples) section.
+Other details of setting can be found in the code. To test my trained models or reproduce these results, see the [Examples](#examples) section.
 
-**Embarrassingly,
+<b>
+Embarrassingly,
 
 - Adding Identification Loss only decreases performance.
 - Adding Local Distance only improves ~1 point.
 - Simply combining trainval sets of three datasets does not improves performance on Market1501 (CUHK03 and DukeMTMC-reID to be tested). This indeed is a research topic.
 
-I will try to make it work, with the help of authors.**
+I will try to make it work, with the help of authors.
+</b>
 
 More scores under different settings can be found in the Excel file [AlignedReID-Scores.xlsx](AlignedReID-Scores.xlsx).
 
@@ -57,7 +59,7 @@ This repository contains following resources
 - A beginner-level dataset interface independent of Pytorch, Tensorflow, etc, supporting multi-thread prefetching (README file is under way)
 - Three most used ReID datasets, Market1501, CUHK03 (new protocol) and DukeMTMC-reID
 - Python version ReID evaluation code (Originally from [open-reid](https://github.com/Cysu/open-reid))
-- Python version Re-ranking (Originally from @michuanhaohao [re_ranking](https://github.com/zhunzhong07/person-re-ranking/blob/master/python-version/re_ranking))
+- Python version Re-ranking (Originally from [re_ranking](https://github.com/zhunzhong07/person-re-ranking/blob/master/python-version/re_ranking))
 - Triplet Loss training examples
 - Deep Mutual Learning examples
 - AlignedReID (performance stays tuned)
@@ -89,7 +91,7 @@ python setup.py install --record installed_files.txt
 
 ## Re-run Installation
 
-**NOTE:** Every time you modify files in directory `aligned_reid`, you have to install the package again by `python setup.py install --record installed_files.txt`. Because scripts that import from this `aligned_reid` package in fact import from site-packages (Determined by where you run the script? Not quite sure.), you have to install to update it.
+**NOTE:** Every time you modify files in directory `aligned_reid`, you have to install the package again by `python setup.py install --record installed_files.txt`. Because scripts that import from this `aligned_reid` package in fact import from site-packages (Determined by where you run the script? Not quite sure.), you have to re-install to update it.
 
 
 # Dataset Preparation
@@ -109,9 +111,9 @@ Transformed dataset has following features
   - `'test_marks'`
 - Validation set consists of 100 persons (configurable during transforming dataset) unseen in training set, and validation follows the same ranking protocol of testing.
 - Each val or test image is accompanied by a mark denoting whether it is from
-  - query (mark == 0), or
-  - gallery (mark == 1), or
-  - multi query (mark == 2) set
+  - query (`mark == 0`), or
+  - gallery (`mark == 1`), or
+  - multi query (`mark == 2`) set
 
 ## Market1501
 
@@ -308,7 +310,7 @@ python script/tri_loss/train.py \
 --model_weight_file THE_DOWNLOADED_MODEL_WEIGHT_FILE
 ```
 
-You can also train it by yourself. The following command performs training and testing automatically. Two ResNet-50 models are trained simultaneously with mutual loss on global distance. GPU 0 and 1 are used.
+You can also train it by yourself. The following command performs training and testing automatically. Two ResNet-50 models are trained simultaneously with mutual loss on global distance. The following example uses GPU 0 and 1. **NOTE the difference between `train_ml.py` and `train.py` when specifying GPU ids. The format is different. Details in code.**
 
 ```bash
 python script/tri_loss/train_ml.py \
