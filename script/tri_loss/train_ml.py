@@ -65,8 +65,8 @@ def main():
 
   # Redirect logs to both console and file.
   if cfg.log_to_file:
-    ReDirectSTD(cfg.log_file, 'stdout', False)
-    ReDirectSTD(cfg.log_err_file, 'stderr', False)
+    ReDirectSTD(cfg.stdout_file, 'stdout', False)
+    ReDirectSTD(cfg.stderr_file, 'stderr', False)
 
   # Lazily create SummaryWriter
   writer = None
@@ -124,6 +124,7 @@ def main():
                            weight_decay=cfg.weight_decay)
                 for m in models]
 
+  # Bind them together just to save some codes in the following usage.
   modules_optims = models + optimizers
 
   ################################
@@ -143,8 +144,8 @@ def main():
   ########
 
   # Test each model using different distance settings.
-  def test(load_from_ckpt=False):
-    if load_from_ckpt:
+  def test(load_model_weight=False):
+    if load_model_weight:
       load_ckpt(modules_optims, cfg.ckpt_file)
 
     use_local_distance = (cfg.l_loss_weight > 0) \
@@ -160,7 +161,7 @@ def main():
           use_local_distance=use_local_distance)
 
   if cfg.only_test:
-    test(load_from_ckpt=True)
+    test(load_model_weight=True)
     return
 
   ############
@@ -594,7 +595,7 @@ def main():
   # Test #
   ########
 
-  test(load_from_ckpt=False)
+  test(load_model_weight=False)
 
 
 if __name__ == '__main__':

@@ -37,6 +37,7 @@ class Config(object):
     parser.add_argument('--only_test', type=str2bool, default=False)
     parser.add_argument('--resume', type=str2bool, default=False)
     parser.add_argument('--exp_dir', type=str, default='')
+    parser.add_argument('--model_weight_file', type=str, default='')
 
     parser.add_argument('--base_lr', type=float, default=2e-4)
     parser.add_argument('--lr_decay_type', type=str, default='exp',
@@ -182,6 +183,10 @@ class Config(object):
     # Log #
     #######
 
+    # If True,
+    # 1) stdout and stderr will be redirected to file,
+    # 2) training loss etc will be written to tensorboard,
+    # 3) checkpoint will be saved
     self.log_to_file = args.log_to_file
 
     # The root dir of logs.
@@ -212,14 +217,12 @@ class Config(object):
     else:
       self.exp_dir = args.exp_dir
 
-  @property
-  def log_file(self):
-    return osp.join(self.exp_dir, 'log_stdout_{}.txt'.format(time_str()))
+    self.stdout_file = osp.join(
+      self.exp_dir, 'stdout_{}.txt'.format(time_str()))
+    self.stderr_file = osp.join(
+      self.exp_dir, 'stderr_{}.txt'.format(time_str()))
 
-  @property
-  def log_err_file(self):
-    return osp.join(self.exp_dir, 'log_stderr_{}.txt'.format(time_str()))
-
-  @property
-  def ckpt_file(self):
-    return osp.join(self.exp_dir, 'ckpt.pth')
+    # Saving model weights and optimizer states, for resuming.
+    self.ckpt_file = osp.join(self.exp_dir, 'ckpt.pth')
+    # Just for loading a pretrained model; no optimizer states is needed.
+    self.model_weight_file = args.model_weight_file

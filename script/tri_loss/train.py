@@ -20,6 +20,7 @@ from aligned_reid.tri_loss.model.loss import global_loss
 from aligned_reid.tri_loss.model.loss import local_loss
 
 from aligned_reid.utils.utils import may_set_mode
+from aligned_reid.utils.utils import load_state_dict
 from aligned_reid.utils.utils import load_ckpt
 from aligned_reid.utils.utils import save_ckpt
 from aligned_reid.utils.utils import set_devices
@@ -62,8 +63,8 @@ def main():
 
   # Redirect logs to both console and file.
   if cfg.log_to_file:
-    ReDirectSTD(cfg.log_file, 'stdout', False)
-    ReDirectSTD(cfg.log_err_file, 'stderr', False)
+    ReDirectSTD(cfg.stdout_file, 'stdout', False)
+    ReDirectSTD(cfg.stderr_file, 'stderr', False)
 
   # Lazily create SummaryWriter
   writer = None
@@ -115,9 +116,10 @@ def main():
   l_tri_loss = TripletLoss(margin=cfg.local_margin)
 
   optimizer = optim.Adam(model.parameters(),
-                           lr=cfg.base_lr,
-                           weight_decay=cfg.weight_decay)
+                         lr=cfg.base_lr,
+                         weight_decay=cfg.weight_decay)
 
+  # Bind them together just to save some codes in the following usage.
   modules_optims = [model, optimizer]
 
   ################################
@@ -135,10 +137,15 @@ def main():
   # Test #
   ########
 
-  # Test each model using different distance settings.
-  def test(load_from_ckpt=False):
-    if load_from_ckpt:
-      load_ckpt(modules_optims, cfg.ckpt_file)
+  def test(load_model_weight=False):
+    if load_model_weight:
+      if cfg.model_weight_file != '':
+        map_location = (lambda storage, loc: storage)
+        sd = torch.load(cfg.model_weight_file, map_location=map_location)
+        load_state_dict(model, sd)
+        print('Loaded model weights from {}'.format(cfg.model_weight_file))
+      else:
+        load_ckpt(modules_optims, cfg.ckpt_file)
 
     use_local_distance = (cfg.l_loss_weight > 0) \
                          and cfg.local_dist_own_hard_sample
@@ -151,7 +158,7 @@ def main():
         use_local_distance=use_local_distance)
 
   if cfg.only_test:
-    test(load_from_ckpt=True)
+    test(load_model_weight=True)
     return
 
   ############
@@ -390,7 +397,7 @@ def main():
   # Test #
   ########
 
-  test(load_from_ckpt=False)
+  test(load_model_weight=False)
 
 
 if __name__ == '__main__':

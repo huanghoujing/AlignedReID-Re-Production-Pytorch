@@ -23,59 +23,50 @@ If you adopt AlignedReID in your research, please cite the paper
   - [x] Re-Ranking
 - Speed
   - [x] Speed up forward & backward
-  - [ ] Speed up local distance at test time. (Replace numpy by pytorch cuda operation.)
 
 
 # Current Results
 
 On Market1501 with setting
-- global margin 0.3
-- local margin 0.3
-- Adam optimizer
-- Base learning rate 2e-4, decaying exponentially after 75 epochs. Train for 150 epochs in total. Refer to paper [In Defense of the Triplet Loss for Person Re-Identification](https://arxiv.org/abs/1703.07737).
+- Train only on Market1501 (While the paper combines 4 datasets.)
+- Use only global distance, NOT normalizing feature to unit length, with margin 0.3
+- Adam optimizer, base learning rate 2e-4, decaying exponentially after 150 epochs. Train for 300 epochs in total.
 
-We achieve the following results. Note that training data only comes from one dataset, while the paper combines 4 datasets.
+|   | Rank-1 (%) | mAP (%) | Rank-1 (%) after Re-ranking | mAP (%) after Re-ranking |
+| --- | --- | --- | --- | --- |
+| Triplet Loss | 87.05 | 71.38 | 89.85 | 85.49 |
+| Triplet Loss + Mutual Loss | 88.78 | 75.76 | 91.92 | 88.27 |
 
-|   | Rank-1 (%) | mAP (%) |
-| --- | --- | --- |
-| GL-NF | 81.53 | 64.87 |
-| --- | --- | --- |
-| GL-LL-NF-LHSFGD-TWGD | 84.29 | 67.94 |
-| GL-LL-NNF-LHSFGD-TWGD | 84.74 | 68.11 |
-| --- | --- | --- |
-| GL-LL-NNF-LHSFLD-TWGD | 85.18 | 68.31 |
-| GL-LL-NNF-LHSFLD-TWLD | 85.60 | 68.72 |
-| GL-LL-NNF-LHSFLD-TWGALD | 86.46 | 70.13 |
-| --- | --- | --- |
-| GL-IDL-NNF | 85.10 | 68.26 |
-| GL-LL-IDL-NNF-LHSFLD-TWGD | 84.74 | 68.34 |
-| GL-LL-IDL-NNF-LHSFLD-TWLD | 85.51 | 67.77 |
-| GL-LL-IDL-NNF-LHSFLD-TWGALD | 85.45 | 69.47 |
+Other details of setting can be found in the code. To test my trained models or reproduce these results, see the [Examples](#Examples) section.
 
-**Notations for the table**
-- GL: Global Loss
-- LL: Local Loss
-- IDL: IDentification Loss
-- NF: Normalize Feature (both before Equation (1) of the paper and at test time)
-- NNF: Not Normalize Feature (both before Equation (1) of the paper and at test time)
-- LHSFGD: Local Hard Sample From Global Distance
-- LHSFLD: Local Hard Sample From Local Distance
-- TWGD: Test With Global Distance
-- TWLD: Test With Local Distance
-- TWGALD: Test With Global And Local Distance
+**Embarrassingly,
 
-The above number of iterations may be insufficient for training ID Loss. When starting decaying at epoch 150 and with total epochs 300, the results are better:
+- Adding Identification Loss only decreases performance.
+- Adding Local Distance only improves ~1 point.
+- Simply combining trainval sets of three datasets does not improves performance on Market1501 (CUHK03 and DukeMTMC-reID to be tested). This indeed is a research topic.
 
-|   | Rank-1 (%) | mAP (%) |
-| --- | --- | --- |
-| GL-LL-IDL-NNF-LHSFLD-TWGD | 86.46 | 70.51 |
-| GL-LL-IDL-NNF-LHSFLD-TWLD | 87.29 | 70.31 |
-| GL-LL-IDL-NNF-LHSFLD-TWGALD | 87.08 | 71.61 |
+I will try to make it work, with the help of authors.**
+
+More scores under different settings can be found in the Excel file [AlignedReID-Scores.xlsx](AlignedReID-Scores.xlsx).
+
+
+# Resources
+
+This repository contains following resources
+
+- A beginner-level dataset interface independent of Pytorch, Tensorflow, etc, supporting multi-thread prefetching (README file is under way)
+- Three most used ReID datasets, Market1501, CUHK03 (new protocol) and DukeMTMC-reID
+- Python version ReID evaluation code (Originally from [open-reid](https://github.com/Cysu/open-reid))
+- Python version Re-ranking (Originally from @michuanhaohao [re_ranking](https://github.com/zhunzhong07/person-re-ranking/blob/master/python-version/re_ranking))
+- Triplet Loss training examples
+- Deep Mutual Learning examples
+- AlignedReID (performance stays tuned)
+
 
 
 # Installation
 
-It's recommended that you create and enter a python virtual environment before installing our package.
+It's recommended that you create and enter a python virtual environment before installing our package. I personally use [Anaconda](https://www.anaconda.com/download/) which contains python and many useful packages.
 
 ```bash
 git clone https://github.com/huanghoujing/AlignedReID-Re-Production-Pytorch.git
@@ -95,6 +86,11 @@ Then install this project:
 ```bash
 python setup.py install --record installed_files.txt
 ```
+
+## Re-run Installation
+
+**NOTE:** Every time you modify files in directory `aligned_reid`, you have to install the package again by `python setup.py install --record installed_files.txt`. Because scripts that import from this `aligned_reid` package in fact import from site-packages (Determined by where you run the script? Not quite sure.), you have to install to update it.
+
 
 # Dataset Preparation
 
@@ -171,7 +167,7 @@ python script/dataset/transform_duke.py \
 
 Larger training set tends to benefit deep learning models, so I combine trainval set of three datasets Market1501, CUHK03 and DukeMTMC-reID. After training on the combined trainval set, the model can be tested on three test sets as usual.
 
-Transform the test sets as introduced above if you have not done it.
+Transform three separate datasets as introduced above if you have not done it.
 
 For the trainval set, you can download what I have transformed from [Google Drive](https://drive.google.com/open?id=1hmZIRkaLvLb_lA1CcC4uGxmA4ppxPinj) or [BaiduYun](https://pan.baidu.com/s/1jIvNYPg). Otherwise, you can run the following script to combine the trainval sets, replacing the paths with yours.
 
@@ -186,9 +182,9 @@ python script/dataset/combine_trainval_sets.py \
 --save_dir ~/Dataset/market1501_cuhk03_duke
 ```
 
-## Configure Dataset Path in Training Script
+## Configure Dataset Path
 
-The training code requires you to configure the dataset paths. In `aligned_reid/tri_loss/dataset/__init__.py`, modify the following snippet according to your saving paths used in preparing datasets.
+The project requires you to configure the dataset paths. In `aligned_reid/tri_loss/dataset/__init__.py`, modify the following snippet according to your saving paths used in preparing datasets.
 
 ```python
 # In file aligned_reid/tri_loss/dataset/__init__.py
@@ -216,6 +212,8 @@ elif name == 'combined':
   im_dir = ospeu('~/Dataset/market1501_cuhk03_duke/trainval_images')
   partition_file = ospeu('~/Dataset/market1501_cuhk03_duke/partitions.pkl')
 ```
+
+After modification, install the package again `python setup.py install --record installed_files.txt`.
 
 
 ## Evaluation Protocol
@@ -249,27 +247,99 @@ cmc_configs = {
 ```
 
 
-# Training Examples
+# Examples
 
-**NOTE:** After changing files in directory `aligned_reid`, you have to install the package again by `python setup.py install --record installed_files.txt`. Because scripts that import from this `aligned_reid` package in fact import from site-packages (Decided by where you run the script? Not sure.), you have to install to update it.
 
-To train and test `ResNet-50 + Global Loss` on Market1501:
+### `ResNet-50 + Global Loss` on Market1501
 
-```bash
-
-```
-
-To train `ResNet-50 + Global Loss + Local Loss` on Market1501, and test with `Global + Local Distance`:
+Training log and saved model weights can be downloaded from [Google Drive](https://drive.google.com/open?id=1ctGhcG2ygnWBIhXRPU7nYbf0IVb9Gq8_) or [BaiduYun](https://pan.baidu.com/s/1eRFsTRO). Specify (1) an experiment directory for saving testing log and (2) the path of the downloaded `model_weight.pth` in the following command.
 
 ```bash
-
+python script/tri_loss/train.py \
+-d '(0,)' \
+--dataset market1501 \
+--normalize_feature false \
+-glw 1 \
+-llw 0 \
+-idlw 0 \
+--only_test true \
+--exp_dir SPECIFY_AN_EXPERIMENT_DIRECTORY_HERE \
+--model_weight_file THE_DOWNLOADED_MODEL_WEIGHT_FILE
 ```
 
-You can run the [TensorBoard](https://github.com/lanpa/tensorboard-pytorch) to watch the loss curves etc during training. E.g.
+You can also train it by yourself. The following command performs training and testing automatically.
+
+```bash
+python script/tri_loss/train.py \
+-d '(0,)' \
+-r 1 \
+--dataset market1501 \
+--ids_per_batch 32 \
+--ims_per_id 4 \
+--normalize_feature false \
+-gm 0.3 \
+-glw 1 \
+-llw 0 \
+-idlw 0 \
+-pmlw 0 \
+-gdmlw 0 \
+-ldmlw 0 \
+--base_lr 2e-4 \
+--lr_decay_type exp \
+--exp_decay_at_epoch 151 \
+--total_epochs 300
+```
+
+
+### `ResNet-50 + Global Loss + Mutual Learning` on Market1501
+
+Training log and saved model weights can be downloaded from [Google Drive](https://drive.google.com/open?id=1a0Ny15K2AuMsP-f-QC8egljnzys5luvh) or [BaiduYun](https://pan.baidu.com/s/1c1YZPnU). Specify (1) an experiment directory for saving testing log and (2) the path of the downloaded `model_weight.pth` in the following command.
+
+```bash
+python script/tri_loss/train.py \
+-d '(0,)' \
+--dataset market1501 \
+--normalize_feature false \
+-glw 1 \
+-llw 0 \
+-idlw 0 \
+--only_test true \
+--exp_dir SPECIFY_AN_EXPERIMENT_DIRECTORY_HERE \
+--model_weight_file THE_DOWNLOADED_MODEL_WEIGHT_FILE
+```
+
+You can also train it by yourself. The following command performs training and testing automatically. Two ResNet-50 models are trained simultaneously with mutual loss on global distance. GPU 0 and 1 are used.
+
+```bash
+python script/tri_loss/train_ml.py \
+-d '((0,), (1,))' \
+-r 1 \
+--num_models 2 \
+--dataset market1501 \
+--ids_per_batch 32 \
+--ims_per_id 4 \
+--normalize_feature false \
+-gm 0.3 \
+-glw 1 \
+-llw 0 \
+-idlw 0 \
+-pmlw 0 \
+-gdmlw 1 \
+-ldmlw 0 \
+--base_lr 2e-4 \
+--lr_decay_type exp \
+--exp_decay_at_epoch 151 \
+--total_epochs 300
+```
+
+
+### Log
+
+During training, you can run the [TensorBoard](https://github.com/lanpa/tensorboard-pytorch) and access port `6006` to watch the loss curves etc. E.g.
 
 ```bash
 # Modify the path for `--logdir` accordingly.
-tensorboard --logdir your_exp_dir/tensorboard
+tensorboard --logdir YOUR_EXPERIMENT_DIRECTORY/tensorboard
 ```
 
 For more usage of TensorBoard, see the website and the help:
@@ -277,3 +347,54 @@ For more usage of TensorBoard, see the website and the help:
 ```bash
 tensorboard --help
 ```
+
+
+# Time and Space Consumption
+
+
+Test with CentOS 7, Intel(R) Xeon(R) CPU E5-2618L v3 @ 2.30GHz, GeForce GTX TITAN X.
+
+**Note that the following time consumption is not gauranteed across machines, especially when the system is busy.**
+
+### GPU Consumption in Training
+
+For following settings
+
+- ResNet-50
+- `identities_per_batch = 32`, `images_per_identity = 4`, `images_per_batch = 32 x 4 = 128`
+- image size `h x w = 256 x 128`
+
+it occupies ~9600MB GPU memory. For mutual learning that involves `N` models, it occupies `N` GPUs each with ~9600MB GPU memory.
+
+If not having a GPU larger than 9600MB, you have to either decrease `identities_per_batch` or use multiple GPUs.
+
+
+### Training Time
+
+Taking Market1501 as an example, it contains `31969` training images of `751` identities, thus `1 epoch = 751 / 32 = 24 iterations`. Each iteration takes ~1.08s, so each epoch ~27s. Training for 300 epochs takes ~2.25 hours.
+
+For training with mutual loss, we use multi threads to achieve parallel network forwarding and backwarding. Each iteration takes ~1.46s, each epoch ~35s. Training for 300 epochs takes ~2.92 hours.
+
+Local distance is implemented in a parallel manner, thus adding local loss does not increase training time obviously, even when local hard samples are searched from local distance (instead of from global distance).
+
+
+### Testing Time
+
+Taking Market1501 as an example
+- With `images_per_batch = 32`, extracting feature of whole test set (12936 images) takes ~80s.
+- Computing query-gallery global distance, the result is a `3368 x 15913` matrix, ~2s
+- Computing query-gallery local distance, the result is a `3368 x 15913` matrix, ~140s
+- Computing CMC and mAP scores, ~15s
+- Re-ranking requires computing query-query distance (a `3368 x 3368` matrix) and gallery-gallery distance (a `15913 x 15913` matrix, most time-consuming), ~80s for global distance, ~800s for local distance
+
+
+# Reference & Credits
+
+- [AlignedReID](https://arxiv.org/abs/1711.08184)
+- [open-reid](https://github.com/Cysu/open-reid)
+- [In Defense of the Triplet Loss for Person Re-Identification](https://arxiv.org/abs/1703.07737)
+- [Deep Mutual Learning](https://arxiv.org/abs/1706.00384)
+- [Re-ranking Person Re-identification with k-reciprocal Encoding](https://github.com/zhunzhong07/person-re-ranking)
+- [Market1501](http://www.liangzheng.org/Project/project_reid.html)
+- [CUHK03](http://www.ee.cuhk.edu.hk/~xgwang/CUHK_identification.html)
+- [DukeMTMC-reID](https://github.com/layumi/DukeMTMC-reID_evaluation)
