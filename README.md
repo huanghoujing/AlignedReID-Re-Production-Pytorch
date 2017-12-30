@@ -283,9 +283,6 @@ python script/tri_loss/train.py \
 -glw 1 \
 -llw 0 \
 -idlw 0 \
--pmlw 0 \
--gdmlw 0 \
--ldmlw 0 \
 --base_lr 2e-4 \
 --lr_decay_type exp \
 --exp_decay_at_epoch 151 \
