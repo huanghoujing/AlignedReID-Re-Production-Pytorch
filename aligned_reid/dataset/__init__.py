@@ -1,13 +1,10 @@
 import numpy as np
 import os.path as osp
-
 ospj = osp.join
 ospeu = osp.expanduser
 
-from aligned_reid.utils.utils import load_pickle
-
-from aligned_reid.utils.dataset_utils import parse_im_name
-
+from ..utils.utils import load_pickle
+from ..utils.dataset_utils import parse_im_name
 from .TrainSet import TrainSet
 from .TestSet import TestSet
 
@@ -16,7 +13,6 @@ def create_dataset(
     name='market1501',
     part='trainval',
     **kwargs):
-
   assert name in ['market1501', 'cuhk03', 'duke', 'combined'], \
     "Unsupported Dataset {}".format(name)
 

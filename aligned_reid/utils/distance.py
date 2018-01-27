@@ -1,4 +1,6 @@
-"""NOTE the input/output shape of methods."""
+"""Numpy version of euclidean distance, shortest distance, etc.
+Notice the input/output shape of methods, so that you can better understand
+the meaning of these methods."""
 import numpy as np
 
 

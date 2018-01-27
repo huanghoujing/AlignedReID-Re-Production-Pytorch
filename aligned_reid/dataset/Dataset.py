@@ -1,5 +1,5 @@
-from aligned_reid.utils.dataset_utils import PreProcessIm
-from aligned_reid.utils.dataset_utils import Prefetcher
+from .PreProcessImage import PreProcessIm
+from .Prefetcher import Prefetcher
 import numpy as np
 
 
@@ -16,25 +16,13 @@ class Dataset(object):
       batch_size=None,
       final_batch=True,
       shuffle=True,
-      resize_size=None,
-      crop_size=None,
-      scale=True,
-      im_mean=None,
-      im_std=None,
-      mirror_type=None,
-      batch_dims='NCHW',
       num_prefetch_threads=1,
-      prng=np.random):
+      prng=np.random,
+      **pre_process_im_kwargs):
 
     self.pre_process_im = PreProcessIm(
-      resize_size=resize_size,
-      crop_size=crop_size,
-      scale=scale,
-      im_mean=im_mean,
-      im_std=im_std,
-      mirror_type=mirror_type,
-      batch_dims=batch_dims,
-      prng=prng)
+      prng=prng,
+      **pre_process_im_kwargs)
 
     self.prefetcher = Prefetcher(
       self.get_sample,

@@ -1,10 +1,7 @@
 from __future__ import print_function
-import sys
 import os
 import os.path as osp
 import cPickle as pickle
-import gc
-import numpy as np
 from scipy import io
 import datetime
 import time
@@ -37,27 +34,6 @@ def save_pickle(obj, path):
   may_make_dir(osp.dirname(osp.abspath(path)))
   with open(path, 'wb') as f:
     pickle.dump(obj, f, protocol=2)
-
-
-def load_hickle(path):
-  """Check and load hickle object.
-  hickle uses HDF5 protocol and is really FAST! 
-  https://github.com/telegraphic/hickle"""
-  assert osp.exists(path)
-  import hickle
-  ret = hickle.load(path)
-  return ret
-
-
-def save_hickle(obj, path):
-  """Create dir and save hickle object.
-  hickle uses HDF5 protocol and is really FAST! 
-  https://github.com/telegraphic/hickle
-  Typical extension of file is `hkl`.
-  """
-  import hickle
-  may_make_dir(osp.dirname(osp.abspath(path)))
-  hickle.dump(obj, path)
 
 
 def save_mat(ndarray, path):
@@ -128,7 +104,7 @@ def may_transfer_modules_optims(modules_and_or_optims, device_id=-1):
       if device_id == -1:
         item.cpu()
       else:
-        item.cuda(device_id=device_id)
+        item.cuda(device=device_id)
     elif item is not None:
       print('[Warning] Invalid type {}'.format(item.__class__.__name__))
 
@@ -298,8 +274,8 @@ def load_state_dict(model, src_state_dict):
     model: A torch.nn.Module object. 
     src_state_dict (dict): A dict containing parameters and persistent buffers.
   Note:
-    This is modified from torch.nn.modules.module.load_state_dict().
-    Just to allow name mismatch.
+    This is modified from torch.nn.modules.module.load_state_dict(), to make
+    the warnings and errors more detailed.
   """
   from torch.nn import Parameter
 
@@ -329,6 +305,10 @@ def load_state_dict(model, src_state_dict):
       print('\t', n)
 
 
+def is_iterable(obj):
+  return hasattr(obj, '__len__')
+
+
 def may_set_mode(maybe_modules, mode):
   """maybe_modules: an object or a list of objects."""
   assert mode in ['train', 'eval']
@@ -356,51 +336,6 @@ def may_make_dir(path):
     return
   if not osp.exists(path):
     os.makedirs(path)
-
-
-def is_iterable(obj):
-  return hasattr(obj, '__len__')
-
-
-def make_sure_str_list(may_be_list):
-  if isinstance(may_be_list, str):
-    may_be_list = [may_be_list]
-  return may_be_list
-
-
-def repeat_select_with_replacement(samples, num_select):
-  """Repeat {select one sample with replacement} for n times.
-  Args:
-    samples: a numpy array with shape [num_samples]
-    num_select: an int, number of selections
-  Returns:
-    all_select: a numpy array with shape [num_comb, num_select], where 
-      num_comb is the number of all possible combinations
-  """
-  num_samples = len(samples)
-  num_comb = num_samples ** num_select
-  all_select = np.zeros([num_comb, num_select], dtype=samples.dtype)
-  for i in range(num_select):
-    num_repeat = num_samples ** (num_select - i - 1)
-    # num_tile = num_comb / (num_repeat * num_samples)
-    num_tile = num_samples ** i
-    all_select[:, i] = np.tile(np.repeat(samples, num_repeat), num_tile)
-  return all_select
-
-
-# It seems Numpy already supports this functionality?
-def index_select(mat, inds):
-  """
-  Args:
-    mat: numpy array with shape [m, n]
-    inds: numpy array with shape [m, n], e.g. the result from `np.argsort(mat)`
-  Returns:
-    ret: numpy array with shape [m, n]
-  """
-  ret = np.empty_like(mat)
-  for i in range(ret.shape[0]):
-    ret[i] = mat[i, inds[i]]
-  return ret
 
 
 class AverageMeter(object):
@@ -553,51 +488,6 @@ class ReDirectSTD(object):
       self.f.close()
 
 
-class Logger(object):
-  """Copied from Tong Xiao's open-reid. 
-  This class overwrites sys.stdout or sys.stderr, so that console logs can 
-  also be written to file.
-  
-  Usage example:
-    import sys
-    sys.stdout = Logger('stdout.txt', sys.stdout)
-    sys.stderr = Logger('stderr.txt', sys.stderr)
-  """
-
-  def __init__(self, fpath=None, console=sys.stdout):
-    assert console in [sys.stdout, sys.stderr]
-    self.console = console
-    self.file = None
-    if fpath is not None:
-      may_make_dir(os.path.dirname(osp.abspath(fpath)))
-      self.file = open(fpath, 'w')
-
-  def __del__(self):
-    self.close()
-
-  def __enter__(self):
-    pass
-
-  def __exit__(self, *args):
-    self.close()
-
-  def write(self, msg):
-    self.console.write(msg)
-    if self.file is not None:
-      self.file.write(msg)
-
-  def flush(self):
-    self.console.flush()
-    if self.file is not None:
-      self.file.flush()
-      os.fsync(self.file.fileno())
-
-  def close(self):
-    self.console.close()
-    if self.file is not None:
-      self.file.close()
-
-
 def set_seed(seed):
   import random
   random.seed(seed)
@@ -613,84 +503,6 @@ def set_seed(seed):
   # set seed for CPU
   torch.manual_seed(seed)
   print('setting torch-seed to {}'.format(seed))
-  try:
-    # set seed for all visible GPUs
-    torch.cuda.manual_seed_all(seed)
-    print('setting torch-cuda-seed to {}'.format(seed))
-  except:
-    pass
-
-
-def softmax(x, T=1.):
-  """T is the temperature. Higher T produces a softer probability distribution 
-  over classes."""
-  return np.exp(x / T) / np.sum(np.exp(x / T))
-
-
-class ParseSeq(object):
-  """Create a function to pass to argparse, so that it can parse input in 
-  this way:
-    '1' => (1,)
-    '1,' => (1,)
-    '1, 2' => (1, 2)
-  """
-
-  def __init__(self, split=',', func=int, ret_type=tuple):
-    self.split = split
-    self.func = func
-    self.ret_type = ret_type
-
-  def __call__(self, s):
-    return self.ret_type(self.func(n) for n in s.split(self.split))
-
-
-def thread_safe_append(file, msg):
-  """Append a message to file, locking the file during writing. 
-  NOTE: thread safe can only be achieved when all threads/processes obey this 
-  acquiring lock rule (use fcntl.flock to acquire lock before writing)."""
-  import fcntl
-  may_make_dir(osp.dirname(osp.abspath(file)))
-  with open(file, 'a') as f:
-    fcntl.flock(f, fcntl.LOCK_EX)
-    f.write(msg)
-    fcntl.flock(f, fcntl.LOCK_UN)
-
-
-def display_image_in_actual_size(im_path):
-  import matplotlib.pyplot as plt
-
-  dpi = 80
-  im_data = plt.imread(im_path)
-  height, width, depth = im_data.shape
-
-  # What size does the figure need to be in inches to fit the image?
-  figsize = width / float(dpi), height / float(dpi)
-
-  # Create a figure of the right size with one axes that takes up the full figure
-  fig = plt.figure(figsize=figsize)
-  ax = fig.add_axes([0, 0, 1, 1])
-
-  # Hide spines, ticks, etc.
-  ax.axis('off')
-
-  # Display the image.
-  ax.imshow(im_data, cmap='gray')
-
-  plt.show()
-
-
-def read_lines(file):
-  with open(file, 'r') as f:
-    lines = f.readlines()
-    lines = [l.strip() for l in lines]
-    return lines
-
-
-def write_lines(file, lines):
-  may_make_dir(osp.dirname(osp.abspath(file)))
-  with open(file, 'w') as f:
-    for l in lines:
-      f.write(l + '\n')
 
 
 def print_array(array, fmt='{:.2f}', end=' '):

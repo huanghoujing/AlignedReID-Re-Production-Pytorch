@@ -130,13 +130,13 @@ def mean_ap(
   """
 
   # -------------------------------------------------------------------------
-  # The behavior of method `sklearn.average_precision` changed after
-  # version 0.18.1.
-  # Version 0.18.1 has same results as Matlab eval code by Zhun Zhong
+  # The behavior of method `sklearn.average_precision` has changed since version
+  # 0.19.
+  # Version 0.18.1 has same results as Matlab evaluation code by Zhun Zhong
   # (https://github.com/zhunzhong07/person-re-ranking/
   # blob/master/evaluation/utils/evaluation.m) and by Liang Zheng
   # (http://www.liangzheng.org/Project/project_reid.html).
-  # So we had better stick to this version.
+  # My current awkward solution is sticking to this older version.
   import sklearn
   cur_version = sklearn.__version__
   required_version = '0.18.1'

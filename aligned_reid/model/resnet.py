@@ -1,8 +1,6 @@
 import torch.nn as nn
 import math
 import torch.utils.model_zoo as model_zoo
-from torch.nn import functional as F
-from itertools import chain
 
 __all__ = ['ResNet', 'resnet18', 'resnet34', 'resnet50', 'resnet101',
            'resnet152']
@@ -17,7 +15,7 @@ model_urls = {
 
 
 def conv3x3(in_planes, out_planes, stride=1):
-  "3x3 convolution with padding"
+  """3x3 convolution with padding"""
   return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride,
                    padding=1, bias=False)
 
@@ -94,6 +92,7 @@ class Bottleneck(nn.Module):
 
 
 class ResNet(nn.Module):
+
   def __init__(self, block, layers):
     self.inplanes = 64
     super(ResNet, self).__init__()
@@ -133,7 +132,6 @@ class ResNet(nn.Module):
     return nn.Sequential(*layers)
 
   def forward(self, x):
-
     x = self.conv1(x)
     x = self.bn1(x)
     x = self.relu(x)
@@ -163,7 +161,6 @@ def resnet18(pretrained=False):
   """
   model = ResNet(BasicBlock, [2, 2, 2, 2])
   if pretrained:
-    print("model_urls['resnet18']: {}".format(model_urls['resnet18']))
     model.load_state_dict(remove_fc(model_zoo.load_url(model_urls['resnet18'])))
   return model
 

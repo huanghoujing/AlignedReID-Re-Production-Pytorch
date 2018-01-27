@@ -2,27 +2,26 @@ from __future__ import print_function
 import sys
 import time
 import os.path as osp
-import matplotlib.pyplot as plt
+from PIL import Image
 import numpy as np
-from collections import defaultdict
 
 from .Dataset import Dataset
 
-from aligned_reid.utils.utils import measure_time
-from aligned_reid.utils.re_ranking import re_ranking
-from aligned_reid.utils.metric import cmc, mean_ap
-from aligned_reid.utils.dataset_utils import parse_im_name
-from aligned_reid.utils.distance import normalize
-from aligned_reid.utils.distance import compute_dist
-from aligned_reid.utils.distance import local_dist
-from aligned_reid.utils.distance import low_memory_matrix_op
+from ..utils.utils import measure_time
+from ..utils.re_ranking import re_ranking
+from ..utils.metric import cmc, mean_ap
+from ..utils.dataset_utils import parse_im_name
+from ..utils.distance import normalize
+from ..utils.distance import compute_dist
+from ..utils.distance import local_dist
+from ..utils.distance import low_memory_matrix_op
 
 
 class TestSet(Dataset):
-  """Test set for triplet loss.
+  """
   Args:
-    extract_feat: a function to extract features. It takes a batch of images 
-      and returns a batch of features.
+    extract_feat_func: a function to extract features. It takes a batch of
+      images and returns a batch of features.
     marks: a list, each element e denoting whether the image is from 
       query (e == 0), or
       gallery (e == 1), or 
@@ -57,7 +56,7 @@ class TestSet(Dataset):
   def get_sample(self, ptr):
     im_name = self.im_names[ptr]
     im_path = osp.join(self.im_dir, im_name)
-    im = plt.imread(im_path)
+    im = np.asarray(Image.open(im_path))
     im, _ = self.pre_process_im(im)
     id = parse_im_name(self.im_names[ptr], 'id')
     cam = parse_im_name(self.im_names[ptr], 'cam')

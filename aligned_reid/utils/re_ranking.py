@@ -1,12 +1,10 @@
-#!/usr/bin/env python2/python3
-# -*- coding: utf-8 -*-
 """
 Created on Mon Jun 26 14:46:56 2017
 
 @author: luohao
 
-Modified by Houjing Huang, 2017-12-22. 
-- This version accepts distance matrix instead of raw features. 
+Modified by Houjing Huang, 2017-12-22.
+- This version accepts distance matrix instead of raw features.
 - The difference of `/` division between python 2 and 3 is handled.
 - numpy.float16 is replaced by numpy.float32 for numerical precision.
 """

@@ -3,19 +3,21 @@ train/val/test set, in order to support the unified dataset interface.
 """
 
 from __future__ import print_function
+
+import sys
+sys.path.insert(0, '.')
+
 from zipfile import ZipFile
 import os.path as osp
 import sys
 import h5py
 from scipy.misc import imsave
 from itertools import chain
-import numpy as np
 
 from aligned_reid.utils.utils import may_make_dir
 from aligned_reid.utils.utils import load_pickle
 from aligned_reid.utils.utils import save_pickle
 
-from aligned_reid.utils.dataset_utils import get_im_names
 from aligned_reid.utils.dataset_utils import partition_train_val_set
 from aligned_reid.utils.dataset_utils import new_im_name_tmpl
 from aligned_reid.utils.dataset_utils import parse_im_name

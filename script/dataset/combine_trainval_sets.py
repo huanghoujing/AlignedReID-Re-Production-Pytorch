@@ -1,12 +1,14 @@
 from __future__ import print_function
 
+import sys
+sys.path.insert(0, '.')
+
 import os.path as osp
 
 ospeu = osp.expanduser
 ospj = osp.join
 ospap = osp.abspath
 
-import numpy as np
 from collections import defaultdict
 import shutil
 

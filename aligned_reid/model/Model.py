@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
 
-from resnet import resnet50
+from .resnet import resnet50
 
 
 class Model(nn.Module):
@@ -32,7 +32,7 @@ class Model(nn.Module):
     # shape [N, C]
     global_feat = global_feat.view(global_feat.size(0), -1)
     # shape [N, C, H, 1]
-    local_feat = torch.mean(feat, -1)
+    local_feat = torch.mean(feat, -1, keepdim=True)
     local_feat = self.local_relu(self.local_bn(self.local_conv(local_feat)))
     # shape [N, H, c]
     local_feat = local_feat.squeeze(-1).permute(0, 2, 1)

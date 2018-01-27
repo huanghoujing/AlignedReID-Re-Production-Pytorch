@@ -1,4 +1,6 @@
-This project is in progress. I try to re-produce the impressive results of paper [AlignedReID: Surpassing Human-Level Performance in Person Re-Identification](https://arxiv.org/abs/1711.08184) using [pytorch](https://github.com/pytorch/pytorch).
+**If you're just looking for a strong triplet loss baseline, [check here](https://github.com/huanghoujing/person-reid-triplet-loss-baseline); for a strong identification loss baseline, [check here](https://github.com/huanghoujing/beyond-part-models).**
+
+This project implements paper [AlignedReID: Surpassing Human-Level Performance in Person Re-Identification](https://arxiv.org/abs/1711.08184) using [pytorch](https://github.com/pytorch/pytorch).
 
 If you adopt AlignedReID in your research, please cite the paper
 ```
@@ -27,7 +29,7 @@ If you adopt AlignedReID in your research, please cite the paper
 
 # Current Results
 
-On Market1501 with setting
+The triplet loss baseline on Market1501 with settings:
 - Train only on Market1501 (While the paper combines 4 datasets.)
 - Use only global distance, NOT normalizing feature to unit length, with margin 0.3
 - Adam optimizer, base learning rate 2e-4, decaying exponentially after 150 epochs. Train for 300 epochs in total.
@@ -39,17 +41,10 @@ On Market1501 with setting
 
 Other details of setting can be found in the code. To test my trained models or reproduce these results, see the [Examples](#examples) section.
 
-<b>
-Embarrassingly,
-
-- Adding Identification Loss only decreases performance.
+Other results are only partially reproduced (see the Excel file [AlignedReID-Scores.xlsx](AlignedReID-Scores.xlsx)):
+- Adding Identification Loss to triplet loss only decreases performance.
 - Adding Local Distance only improves ~1 point.
-- Simply combining trainval sets of three datasets does not improves performance on Market1501 (CUHK03 and DukeMTMC-reID to be tested). This indeed is a research topic.
-
-I will try to make it work, with the help of authors.
-</b>
-
-More scores under different settings can be found in the Excel file [AlignedReID-Scores.xlsx](AlignedReID-Scores.xlsx).
+- Simply combining trainval sets of three datasets does not improves performance on Market1501 (CUHK03 and DukeMTMC-reID to be tested).
 
 
 # Resources
@@ -68,30 +63,22 @@ This repository contains following resources
 
 # Installation
 
-It's recommended that you create and enter a python virtual environment before installing our package. I personally use [Anaconda](https://www.anaconda.com/download/) which contains python and many useful packages.
+**NOTE: This project now does NOT require installing, so if you has installed `aligned_reid` before, now you have to uninstall it by `pip uninstall aligned-reid`.**
 
-```bash
-git clone https://github.com/huanghoujing/AlignedReID-Re-Production-Pytorch.git
-cd AlignedReID-Re-Production-Pytorch
-```
+It's recommended that you create and enter a python virtual environment, if versions of the packages required here conflict with yours.
 
-## Requirements
-
-I use Python 2.7 and Pytorch 0.1.12. For installing Pytorch 0.1.12, follow the [official guide](http://pytorch.org/previous-versions/). Other packages are specified in `requirements.txt`.
+I use Python 2.7 and Pytorch 0.3. For installing Pytorch, follow the [official guide](http://pytorch.org/). Other packages are specified in `requirements.txt`.
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Then install this project:
+Then clone the repository:
 
 ```bash
-python setup.py install --record installed_files.txt
+git clone https://github.com/huanghoujing/AlignedReID-Re-Production-Pytorch.git
+cd AlignedReID-Re-Production-Pytorch
 ```
-
-## Re-run Installation
-
-**NOTE:** Every time you modify files in directory `aligned_reid`, you have to install the package again by `python setup.py install --record installed_files.txt`. Because scripts that import from this `aligned_reid` package in fact import from site-packages (Determined by where you run the script? Not quite sure.), you have to re-install to update it.
 
 
 # Dataset Preparation
@@ -186,10 +173,10 @@ python script/dataset/combine_trainval_sets.py \
 
 ## Configure Dataset Path
 
-The project requires you to configure the dataset paths. In `aligned_reid/tri_loss/dataset/__init__.py`, modify the following snippet according to your saving paths used in preparing datasets.
+The project requires you to configure the dataset paths. In `aligned_reid/dataset/__init__.py`, modify the following snippet according to your saving paths used in preparing datasets.
 
 ```python
-# In file aligned_reid/tri_loss/dataset/__init__.py
+# In file aligned_reid/dataset/__init__.py
 
 ########################################
 # Specify Directory and Partition File #
@@ -215,15 +202,12 @@ elif name == 'combined':
   partition_file = ospeu('~/Dataset/market1501_cuhk03_duke/partitions.pkl')
 ```
 
-After modification, install the package again `python setup.py install --record installed_files.txt`.
-
-
 ## Evaluation Protocol
 
 Datasets used in this project all follow the standard evaluation protocol of Market1501, using CMC and mAP metric. According to [open-reid](https://github.com/Cysu/open-reid), the setting of CMC is as follows
 
 ```python
-# In file aligned_reid/tri_loss/dataset/__init__.py
+# In file aligned_reid/dataset/__init__.py
 
 cmc_kwargs = dict(separate_camera_set=False,
                   single_gallery_shot=False,
@@ -257,7 +241,7 @@ cmc_configs = {
 Training log and saved model weights can be downloaded from [Google Drive](https://drive.google.com/open?id=1ctGhcG2ygnWBIhXRPU7nYbf0IVb9Gq8_) or [BaiduYun](https://pan.baidu.com/s/1eRFsTRO). Specify (1) an experiment directory for saving testing log and (2) the path of the downloaded `model_weight.pth` in the following command.
 
 ```bash
-python script/tri_loss/train.py \
+python script/experiment/train.py \
 -d '(0,)' \
 --dataset market1501 \
 --normalize_feature false \
@@ -272,7 +256,7 @@ python script/tri_loss/train.py \
 You can also train it by yourself. The following command performs training and testing automatically.
 
 ```bash
-python script/tri_loss/train.py \
+python script/experiment/train.py \
 -d '(0,)' \
 -r 1 \
 --dataset market1501 \
@@ -295,7 +279,7 @@ python script/tri_loss/train.py \
 Training log and saved model weights can be downloaded from [Google Drive](https://drive.google.com/open?id=1a0Ny15K2AuMsP-f-QC8egljnzys5luvh) or [BaiduYun](https://pan.baidu.com/s/1c1YZPnU). Specify (1) an experiment directory for saving testing log and (2) the path of the downloaded `model_weight.pth` in the following command.
 
 ```bash
-python script/tri_loss/train.py \
+python script/experiment/train.py \
 -d '(0,)' \
 --dataset market1501 \
 --normalize_feature false \
@@ -310,7 +294,7 @@ python script/tri_loss/train.py \
 You can also train it by yourself. The following command performs training and testing automatically. Two ResNet-50 models are trained simultaneously with mutual loss on global distance. The following example uses GPU 0 and 1. **NOTE the difference between `train_ml.py` and `train.py` when specifying GPU ids. The format is different. Details in code.**
 
 ```bash
-python script/tri_loss/train_ml.py \
+python script/experiment/train_ml.py \
 -d '((0,), (1,))' \
 -r 1 \
 --num_models 2 \
@@ -372,7 +356,7 @@ If not having a GPU larger than 9600MB, you have to either decrease `identities_
 
 Taking Market1501 as an example, it contains `31969` training images of `751` identities, thus `1 epoch = 751 / 32 = 24 iterations`. Each iteration takes ~1.08s, so each epoch ~27s. Training for 300 epochs takes ~2.25 hours.
 
-For training with mutual loss, we use multi threads to achieve parallel network forwarding and backwarding. Each iteration takes ~1.46s, each epoch ~35s. Training for 300 epochs takes ~2.92 hours.
+For training with mutual loss, we use multi threads to achieve parallel network forwarding and backwarding. Each iteration takes ~1.46s, each epoch ~35s. Training for 300 epochs takes ~2.92 hours. (Time consumption may vibrate a lot, not solved.)
 
 Local distance is implemented in a parallel manner, thus adding local loss does not increase training time obviously, even when local hard samples are searched from local distance (instead of from global distance).
 
@@ -387,7 +371,7 @@ Taking Market1501 as an example
 - Re-ranking requires computing query-query distance (a `3368 x 3368` matrix) and gallery-gallery distance (a `15913 x 15913` matrix, most time-consuming), ~80s for global distance, ~800s for local distance
 
 
-# Reference & Credits
+# References & Credits
 
 - [AlignedReID](https://arxiv.org/abs/1711.08184)
 - [open-reid](https://github.com/Cysu/open-reid)

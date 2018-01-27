@@ -1,8 +1,8 @@
 from .Dataset import Dataset
-from aligned_reid.utils.dataset_utils import parse_im_name
+from ..utils.dataset_utils import parse_im_name
 
 import os.path as osp
-import matplotlib.pyplot as plt
+from PIL import Image
 import numpy as np
 from collections import defaultdict
 
@@ -51,7 +51,8 @@ class TrainSet(Dataset):
     else:
       inds = np.random.choice(inds, self.ims_per_id, replace=False)
     im_names = [self.im_names[ind] for ind in inds]
-    ims = [plt.imread(osp.join(self.im_dir, name)) for name in im_names]
+    ims = [np.asarray(Image.open(osp.join(self.im_dir, name)))
+           for name in im_names]
     ims, mirrored = zip(*[self.pre_process_im(im) for im in ims])
     labels = [self.ids2labels[self.ids[ptr]] for _ in range(self.ims_per_id)]
     return ims, im_names, labels, mirrored
@@ -67,7 +68,7 @@ class TrainSet(Dataset):
     """
     # Start enqueuing and other preparation at the beginning of an epoch.
     if self.epoch_done and self.shuffle:
-      if self.shuffle: np.random.shuffle(self.ids)
+      np.random.shuffle(self.ids)
     samples, self.epoch_done = self.prefetcher.next_batch()
     im_list, im_names, labels, mirrored = zip(*samples)
     # t = time.time()

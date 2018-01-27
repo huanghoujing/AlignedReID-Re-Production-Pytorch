@@ -3,6 +3,10 @@ train/val/test set, in order to support the unified dataset interface.
 """
 
 from __future__ import print_function
+
+import sys
+sys.path.insert(0, '.')
+
 from zipfile import ZipFile
 import os.path as osp
 import numpy as np

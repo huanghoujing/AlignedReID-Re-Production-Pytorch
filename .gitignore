@@ -1,8 +1,4 @@
 .idea/
-build/
-dist/
-aligned_reid.egg-info/
-installed_files.txt
 exp/
 tmp/
 *.pyc

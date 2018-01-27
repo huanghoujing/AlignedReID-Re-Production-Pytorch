@@ -9,7 +9,7 @@ def normalize(x, axis=-1):
   Returns:
     x: pytorch Variable, same shape as input      
   """
-  x = x / (torch.norm(x, 2, axis).expand_as(x) + 1e-12)
+  x = 1. * x / (torch.norm(x, 2, axis, keepdim=True).expand_as(x) + 1e-12)
   return x
 
 
@@ -22,8 +22,8 @@ def euclidean_dist(x, y):
     dist: pytorch Variable, with shape [m, n]
   """
   m, n = x.size(0), y.size(0)
-  xx = torch.pow(x, 2).sum(1).expand(m, n)
-  yy = torch.pow(y, 2).sum(1).expand(n, m).t()
+  xx = torch.pow(x, 2).sum(1, keepdim=True).expand(m, n)
+  yy = torch.pow(y, 2).sum(1, keepdim=True).expand(n, m).t()
   dist = xx + yy
   dist.addmm_(1, -2, x, y.t())
   dist = dist.clamp(min=1e-12).sqrt()  # for numerical stability
@@ -47,8 +47,8 @@ def batch_euclidean_dist(x, y):
   N, n, d = y.size()
 
   # shape [N, m, n]
-  xx = torch.pow(x, 2).sum(-1).expand(N, m, n)
-  yy = torch.pow(y, 2).sum(-1).expand(N, n, m).permute(0, 2, 1)
+  xx = torch.pow(x, 2).sum(-1, keepdim=True).expand(N, m, n)
+  yy = torch.pow(y, 2).sum(-1, keepdim=True).expand(N, n, m).permute(0, 2, 1)
   dist = xx + yy
   dist.baddbmm_(1, -2, x, y.permute(0, 2, 1))
   dist = dist.clamp(min=1e-12).sqrt()  # for numerical stability
@@ -156,11 +156,11 @@ def hard_example_mining(dist_mat, labels, return_inds=False):
   # `dist_ap` means distance(anchor, positive)
   # both `dist_ap` and `relative_p_inds` with shape [N, 1]
   dist_ap, relative_p_inds = torch.max(
-    dist_mat[is_pos].contiguous().view(N, -1), 1)
+    dist_mat[is_pos].contiguous().view(N, -1), 1, keepdim=True)
   # `dist_an` means distance(anchor, negative)
   # both `dist_an` and `relative_n_inds` with shape [N, 1]
   dist_an, relative_n_inds = torch.min(
-    dist_mat[is_neg].contiguous().view(N, -1), 1)
+    dist_mat[is_neg].contiguous().view(N, -1), 1, keepdim=True)
   # shape [N]
   dist_ap = dist_ap.squeeze(1)
   dist_an = dist_an.squeeze(1)
