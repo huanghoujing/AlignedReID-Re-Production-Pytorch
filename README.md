@@ -1,4 +1,7 @@
-**If you're just looking for a strong triplet loss baseline, [check here](https://github.com/huanghoujing/person-reid-triplet-loss-baseline); for a strong identification loss baseline, [check here](https://github.com/huanghoujing/beyond-part-models).**
+**Related Projects:**
+- [Strong Triplet Loss Baseline](https://github.com/huanghoujing/person-reid-triplet-loss-baseline)
+- [Strong Identification Loss Baseline](https://github.com/huanghoujing/beyond-part-models)
+
 
 This project implements paper [AlignedReID: Surpassing Human-Level Performance in Person Re-Identification](https://arxiv.org/abs/1711.08184) using [pytorch](https://github.com/pytorch/pytorch).
 
