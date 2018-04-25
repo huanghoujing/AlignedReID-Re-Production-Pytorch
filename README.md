@@ -90,6 +90,7 @@ Inspired by Tong Xiao's [open-reid](https://github.com/Cysu/open-reid) project, 
 
 Transformed dataset has following features
 - All used images, including training and testing images, are inside the same folder named `images`
+- Images are renamed, with the name mapping from original images to new ones provided in a file named `ori_to_new_im_name.pkl`. The mapping may be needed in some cases.
 - The train/val/test partitions are recorded in a file named `partitions.pkl` which is a dict with the following keys
   - `'trainval_im_names'`
   - `'trainval_ids2labels'`
