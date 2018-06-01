@@ -1,5 +1,5 @@
 import threading
-import Queue
+import queue 
 import time
 
 
@@ -46,7 +46,7 @@ class Enqueuer(object):
     assert num_threads > 0
     self.num_threads = num_threads
     self.queue_size = queue_size
-    self.queue = Queue.Queue(maxsize=queue_size)
+    self.queue = queue.Queue(maxsize=queue_size)
     # The pointer shared by threads.
     self.ptr = Counter(max_val=num_elements)
     # The event to wake up threads, it's set at the beginning of an epoch.
@@ -83,7 +83,7 @@ class Enqueuer(object):
     time.sleep(5)
     self.reset_event.clear()
     self.ptr.reset()
-    self.queue = Queue.Queue(maxsize=self.queue_size)
+    self.queue = queue.Queue(maxsize=self.queue_size)
 
   def set_num_elements(self, num_elements):
     """Reset the max number of elements."""
