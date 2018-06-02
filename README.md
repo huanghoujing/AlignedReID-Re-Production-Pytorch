@@ -70,7 +70,9 @@ This repository contains following resources
 
 It's recommended that you create and enter a python virtual environment, if versions of the packages required here conflict with yours.
 
-I use Python 2.7 and Pytorch 0.3. For installing Pytorch, follow the [official guide](http://pytorch.org/). Other packages are specified in `requirements.txt`.
+**This branch is to support both python2 and python3 but currently may not be fully compatible yet.**
+
+I use Pytorch 0.3. For installing Pytorch, follow the [official guide](http://pytorch.org/). Other packages are specified in `requirements.txt`.
 
 ```bash
 pip install -r requirements.txt
