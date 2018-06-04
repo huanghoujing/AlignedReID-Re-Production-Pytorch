@@ -1,6 +1,10 @@
 import threading
-import queue 
 import time
+
+try:
+    import Queue as queue
+except ImportError:
+    import queue
 
 
 class Counter(object):
