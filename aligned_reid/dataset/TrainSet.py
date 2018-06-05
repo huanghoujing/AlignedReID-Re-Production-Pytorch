@@ -33,7 +33,7 @@ class TrainSet(Dataset):
     self.ids_to_im_inds = defaultdict(list)
     for ind, id in enumerate(im_ids):
       self.ids_to_im_inds[id].append(ind)
-    self.ids = self.ids_to_im_inds.keys()
+    self.ids = list(self.ids_to_im_inds.keys())
 
     super(TrainSet, self).__init__(
       dataset_size=len(self.ids),
@@ -50,7 +50,10 @@ class TrainSet(Dataset):
       inds = np.random.choice(inds, self.ims_per_id, replace=True)
     else:
       inds = np.random.choice(inds, self.ims_per_id, replace=False)
+
     im_names = [self.im_names[ind] for ind in inds]
+    if not isinstance(im_names[0],str):
+      im_names = [name.decode("utf-8") for name in im_names]
     ims = [np.asarray(Image.open(osp.join(self.im_dir, name)))
            for name in im_names]
     ims, mirrored = zip(*[self.pre_process_im(im) for im in ims])
