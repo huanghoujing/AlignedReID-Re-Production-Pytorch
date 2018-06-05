@@ -124,7 +124,7 @@ class Config(object):
 
     self.ids_per_batch = args.ids_per_batch
     self.ims_per_id = args.ims_per_id
-    self.train_final_batch = True
+    self.train_final_batch = False
     self.train_mirror_type = ['random', 'always', None][0]
     self.train_shuffle = True
 
