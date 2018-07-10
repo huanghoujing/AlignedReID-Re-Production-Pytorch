@@ -48,6 +48,12 @@ def save_im_name_mapping(raw_dir, ori_to_new_im_name_file):
     # Filter out id -1
     if dir_name == 'bounding_box_test':
       im_names_ = [n for n in im_names_ if not n.startswith('-1')]
+    # Get (id, cam) in query set
+    if dir_name == 'query':
+      q_ids_cams = set([(parse_original_im_name(n, 'id'), parse_original_im_name(n, 'cam')) for n in im_names_])
+    # Filter out images that are not corresponding to query (id, cam)
+    if dir_name == 'gt_bbox':
+      im_names_ = [n for n in im_names_ if (parse_original_im_name(n, 'id'), parse_original_im_name(n, 'cam')) in q_ids_cams]
     # Images in different original directories may have same names,
     # so here we use relative paths as original image names.
     im_names_ = [osp.join(dir_name, n) for n in im_names_]
