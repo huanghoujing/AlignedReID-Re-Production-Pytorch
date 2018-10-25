@@ -5,3 +5,4 @@ h5py==2.6.0
 tensorboardX==0.8
 # for tensorboard web server
 tensorflow==1.2.0
+torch
